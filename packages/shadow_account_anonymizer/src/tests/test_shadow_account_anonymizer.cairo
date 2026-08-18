@@ -17,7 +17,7 @@ use snforge_std::{
 };
 use starknet::account::Call;
 use starknet::{ContractAddress, SyscallResultTrait};
-use starkware_accounts::sub_account::{ISubAccountDispatcher, ISubAccountDispatcherTrait};
+use starkware_accounts::shadow_account::{IShadowAccountDispatcher, IShadowAccountDispatcherTrait};
 use starkware_utils_testing::test_utils::{
     TokenHelperTrait, assert_expected_event_emitted, assert_panic_with_felt_error,
     cheat_caller_address_once,
@@ -42,7 +42,7 @@ fn test_get_privacy_contract() {
 #[test]
 fn test_get_shadow_account_class_hash() {
     let anonymizer = deploy_shadow_account_anonymizer();
-    let expected = *declare("SubAccount").unwrap_syscall().contract_class().class_hash;
+    let expected = *declare("ShadowAccount").unwrap_syscall().contract_class().class_hash;
     assert_eq!(anonymizer_disp(anonymizer).get_shadow_account_class_hash(), expected);
 }
 
@@ -52,13 +52,16 @@ fn test_get_shadow_account_unknown_identity_commitment_is_zero() {
     assert!(anonymizer_disp(anonymizer).get_shadow_account('UNKNOWN').is_zero());
 }
 
+/// `get_shadow_account` reports only what is stored, so an undeployed commitment reads back as
+/// zero. The address such a commitment *would* deploy to comes from the range view instead, which
+/// `test_get_shadow_accounts_computed_address_matches_deploy` covers.
 #[test]
-fn test_undeployed_shadow_account_resolves_to_computed_address() {
+fn test_undeployed_shadow_account_has_no_stored_address() {
     let anonymizer = deploy_shadow_account_anonymizer();
-    let info = shadow_account_info(anonymizer, 0);
-    // Undeployed, but still resolves to the deterministic address it would deploy to.
-    assert!(!info.is_deployed);
-    assert!(info.address.is_non_zero());
+    let commitment = commitment_from_partial(partial_commitment('USER', 'DAPP'), 0);
+
+    assert!(!shadow_account_info(anonymizer, 0).is_deployed);
+    assert!(anonymizer_disp(anonymizer).get_shadow_account(commitment).is_zero());
 }
 
 #[test]
@@ -275,7 +278,8 @@ fn test_deployed_shadow_account_owned_by_anonymizer() {
     let shadow_account = shadow_account_info(components.anonymizer, 1).address;
     // The anonymizer is the shadow account's deployer, so it is the only authorized controller.
     assert_eq!(
-        ISubAccountDispatcher { contract_address: shadow_account }.owner(), components.anonymizer,
+        IShadowAccountDispatcher { contract_address: shadow_account }.owner(),
+        components.anonymizer,
     );
 }
 
