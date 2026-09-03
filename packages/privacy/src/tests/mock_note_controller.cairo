@@ -1,9 +1,11 @@
 //! Contract-note callback used to exercise contract-note authorization and context binding.
 
 use privacy::objects::{ContractNoteContext, OpenNoteDeposit};
+use starknet::ClassHash;
 
 #[starknet::interface]
 pub trait IMockNoteController<T> {
+    fn upgrade(ref self: T, new_class_hash: ClassHash);
     fn set_allowed(ref self: T, allowed: bool);
     fn set_expected_actions_hash(ref self: T, expected_actions_hash: felt252);
     fn callback_count(self: @T) -> u32;
@@ -22,7 +24,8 @@ pub mod MockNoteController {
     use privacy::objects::{ContractNoteContext, OpenNoteDeposit};
     use privacy::utils::validate_contract_note_context;
     use starknet::storage::{StoragePointerReadAccess, StoragePointerWriteAccess};
-    use starknet::{ContractAddress, get_caller_address};
+    use starknet::syscalls::replace_class_syscall;
+    use starknet::{ClassHash, ContractAddress, SyscallResultTrait, get_caller_address};
     use super::IMockNoteController;
 
     pub const CALLBACK_MARKER: felt252 = 'CONTRACT_NOTE_CALLBACK';
@@ -48,6 +51,10 @@ pub mod MockNoteController {
 
     #[abi(embed_v0)]
     impl MockNoteControllerImpl of IMockNoteController<ContractState> {
+        fn upgrade(ref self: ContractState, new_class_hash: ClassHash) {
+            replace_class_syscall(new_class_hash).unwrap_syscall();
+        }
+
         fn set_allowed(ref self: ContractState, allowed: bool) {
             self.allowed.write(allowed);
         }

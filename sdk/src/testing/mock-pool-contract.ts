@@ -127,7 +127,6 @@ export class MockPoolContract implements MockContract, PoolContractInterface {
     return {
       note_commitment: 0n,
       contract_address: 0n,
-      contract_class_hash: 0n,
       policy_commitment: 0n,
       token: 0n,
     };

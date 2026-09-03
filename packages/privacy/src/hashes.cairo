@@ -1,7 +1,7 @@
 use core::num::traits::Zero;
 use core::poseidon::poseidon_hash_span;
 use domain_separation::*;
-use starknet::{ClassHash, ContractAddress};
+use starknet::ContractAddress;
 
 /// Domain-separation tags for contract hashes.
 ///
@@ -263,7 +263,6 @@ pub(crate) fn compute_contract_note_id(
     pool_address: ContractAddress,
     sender_addr: ContractAddress,
     contract_address: ContractAddress,
-    contract_class_hash: ClassHash,
     policy_commitment: felt252,
     token: ContractAddress,
     secret: felt252,
@@ -271,7 +270,7 @@ pub(crate) fn compute_contract_note_id(
     hash(
         [
             CONTRACT_NOTE_ID_TAG, chain_id, pool_address.into(), sender_addr.into(),
-            contract_address.into(), contract_class_hash.into(), policy_commitment, token.into(),
+            contract_address.into(), policy_commitment, token.into(),
             derive_contract_note_nonce(secret),
         ]
             .span(),
@@ -284,7 +283,6 @@ pub(crate) fn compute_contract_note_commitment(
     pool_address: ContractAddress,
     note_id: felt252,
     contract_address: ContractAddress,
-    contract_class_hash: ClassHash,
     policy_commitment: felt252,
     token: ContractAddress,
     amount: u128,
@@ -293,8 +291,8 @@ pub(crate) fn compute_contract_note_commitment(
     hash(
         [
             CONTRACT_NOTE_COMMIT_TAG, chain_id, pool_address.into(), note_id,
-            contract_address.into(), contract_class_hash.into(), policy_commitment, token.into(),
-            amount.into(), derive_contract_note_blinding(secret),
+            contract_address.into(), policy_commitment, token.into(), amount.into(),
+            derive_contract_note_blinding(secret),
         ]
             .span(),
     )

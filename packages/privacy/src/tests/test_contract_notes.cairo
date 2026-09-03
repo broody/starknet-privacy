@@ -4,7 +4,7 @@ use privacy::actions::{
     UseContractNoteInput, UseNoteInput,
 };
 use privacy::hashes::compute_contract_note_nullifier;
-use privacy::objects::ContractNote;
+use privacy::objects::{ContractNote, OpenNoteDeposit};
 use privacy::tests::mock_note_controller::MockNoteController::{CALLBACK_MARKER, CONTROLLER_DENIED};
 use privacy::tests::mock_note_controller::{
     IMockNoteControllerDispatcher, IMockNoteControllerDispatcherTrait,
@@ -15,8 +15,11 @@ use privacy::tests::utils_for_tests::{
 use privacy::utils::compute_contract_note_actions_hash;
 use privacy::utils::constants::CONTRACT_NOTE_INVOKE_SELECTOR;
 use privacy::{errors, events};
-use snforge_std::{EventSpyTrait, EventsFilterTrait, get_class_hash, spy_events};
-use starknet::{ContractAddress, get_execution_info};
+use snforge_std::{
+    DeclareResultTrait, EventSpyTrait, EventsFilterTrait, declare, get_class_hash, mock_call,
+    spy_events,
+};
+use starknet::{ContractAddress, SyscallResultTrait, get_execution_info};
 use starkware_utils_testing::test_utils::{
     assert_expected_event_emitted, assert_panic_with_felt_error,
 };
@@ -127,13 +130,11 @@ fn test_contract_note_lifecycle_binds_exact_actions_and_authorizes_atomically() 
     assert_eq!(controller_dispatcher.callback_count(), 1);
     assert_eq!(controller_dispatcher.last_created_note_id(), created.note_id);
     assert_eq!(controller_dispatcher.last_spent_nullifier(), 0);
-    assert_eq!(created.contract_class_hash, get_class_hash(controller));
     assert_eq!(
         test.privacy.get_contract_note(note_id: created.note_id),
         ContractNote {
             note_commitment: created.note_commitment,
             contract_address: controller,
-            contract_class_hash: created.contract_class_hash,
             policy_commitment: POLICY_COMMITMENT,
             token,
         },
@@ -162,11 +163,7 @@ fn test_contract_note_lifecycle_binds_exact_actions_and_authorizes_atomically() 
     assert_eq!(controller_dispatcher.last_spent_nullifier(), nullifier);
     let emitted_events = spy.get_events().emitted_by(contract_address: test.privacy.address).events;
     let expected_event = events::ContractNoteUsed {
-        nullifier,
-        contract_address: controller,
-        policy_commitment: POLICY_COMMITMENT,
-        contract_class_hash: created.contract_class_hash,
-        token,
+        nullifier, contract_address: controller, policy_commitment: POLICY_COMMITMENT, token,
     };
     assert_expected_event_emitted(
         spied_event: emitted_events[0],
@@ -177,6 +174,43 @@ fn test_contract_note_lifecycle_binds_exact_actions_and_authorizes_atomically() 
 
     let replay = test.privacy.safe_apply_actions(:actions);
     assert_panic_with_felt_error(result: replay, expected_error: errors::NON_ZERO_VALUE);
+}
+
+#[test]
+fn test_contract_note_survives_contract_upgrade() {
+    let mut test: Test = Default::default();
+    let mut user = test.new_user();
+    let (token, use_source, output) = source_note(ref test, ref user);
+    let contract_address = deploy_mock_note_controller(
+        pool_address: test.privacy.address, allowed: true, salt: 0,
+    );
+    let created = create_contract_note(
+        @test, @user, :token, :use_source, controller: contract_address,
+    );
+
+    let replacement_class = declare(contract: "MockComputeEmpty")
+        .unwrap_syscall()
+        .contract_class()
+        .class_hash;
+    let controller_dispatcher = IMockNoteControllerDispatcher { contract_address };
+    controller_dispatcher.upgrade(new_class_hash: *replacement_class);
+    assert_eq!(get_class_hash(contract_address), *replacement_class);
+
+    let actions = spend_actions(
+        @user, note_id: created.note_id, :output, controller: contract_address,
+    );
+    // Isolate the pool's address binding from the replacement's application behavior.
+    let no_deposits: Array<OpenNoteDeposit> = array![];
+    mock_call(contract_address, CONTRACT_NOTE_INVOKE_SELECTOR, no_deposits.span(), 1);
+    test.privacy.apply_actions(:actions);
+
+    let nullifier = compute_contract_note_nullifier(
+        chain_id: get_execution_info().tx_info.chain_id,
+        pool_address: test.privacy.address,
+        note_id: created.note_id,
+        secret: SECRET,
+    );
+    assert!(test.privacy.contract_note_nullifier_exists(:nullifier));
 }
 
 #[test]

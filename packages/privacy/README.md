@@ -71,10 +71,10 @@ contracts must:
 - return a correctly serialized `Span<OpenNoteDeposit>` (empty when it creates no open-note
   deposits).
 
-Only one application contract and class hash may appear in a transaction. The pool binds notes to
-the contract class hash and freezes them after a direct class replacement. This does **not**
-detect an implementation change behind a proxy: proxy-based contracts must include and enforce
-an immutable policy/version commitment themselves.
+Only one application contract may appear in a transaction. Contract notes remain bound to its
+address across upgrades. Applications own their upgrade policy and must preserve the callback ABI
+and policy semantics needed by outstanding notes; they can disable upgrades when immutability is
+required.
 
 The `secret` is supplied to the prover. It must be generated with cryptographic randomness, retained
 by the party that will spend the note, and never placed in public calldata, events, logs, or

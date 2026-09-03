@@ -42,7 +42,6 @@ describe("Hash Compatibility with Cairo", () => {
   const contractNoteChainId = BigInt(inputs.contractNoteChainId);
   const contractNotePool = BigInt(inputs.contractNotePool);
   const contractAddress = BigInt(inputs.contractAddress);
-  const contractClassHash = BigInt(inputs.contractClassHash);
   const policyCommitment = BigInt(inputs.policyCommitment);
   const contractNoteSecret = BigInt(inputs.contractNoteSecret);
 
@@ -117,7 +116,6 @@ describe("Hash Compatibility with Cairo", () => {
       contractNotePool,
       sender,
       contractAddress,
-      contractClassHash,
       policyCommitment,
       token,
       contractNoteSecret
@@ -129,7 +127,6 @@ describe("Hash Compatibility with Cairo", () => {
       contractNotePool,
       contractNoteId,
       contractAddress,
-      contractClassHash,
       policyCommitment,
       token,
       BigInt(inputs.amount),

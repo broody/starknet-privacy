@@ -1,5 +1,5 @@
 use privacy::objects::{EncPrivateKey, EncUserAddr, OpenNoteScreeningPolicy};
-use starknet::{ClassHash, ContractAddress};
+use starknet::ContractAddress;
 
 #[derive(Serde, Copy, Debug, Drop, PartialEq, starknet::Event)]
 pub struct ViewingKeySet {
@@ -117,8 +117,6 @@ pub struct ContractNoteCreated {
     /// The application-specific policy commitment.
     #[key]
     pub policy_commitment: felt252,
-    /// The contract implementation bound for the lifetime of the note.
-    pub contract_class_hash: ClassHash,
     /// The note's token. Contract-note token types are intentionally public to the contract.
     pub token: ContractAddress,
     /// Hiding commitment to the private amount and blinding.
@@ -136,8 +134,6 @@ pub struct ContractNoteUsed {
     /// Application-specific policy commitment bound at creation.
     #[key]
     pub policy_commitment: felt252,
-    /// The implementation class bound at creation.
-    pub contract_class_hash: ClassHash,
     /// Token released into the private transaction's conservation balance.
     pub token: ContractAddress,
 }

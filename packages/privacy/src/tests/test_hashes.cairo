@@ -261,7 +261,6 @@ fn test_compute_contract_note_id_different_inputs() {
     let pool_address = hash(['POOL_ADDRESS'].span()).try_into().unwrap();
     let sender_addr = hash(['SENDER_ADDR'].span()).try_into().unwrap();
     let contract_address = hash(['CONTRACT_ADDRESS'].span()).try_into().unwrap();
-    let contract_class_hash = hash(['CONTRACT_CLASS'].span()).try_into().unwrap();
     let policy_commitment = hash(['POLICY_COMMITMENT'].span());
     let token = hash(['TOKEN'].span()).try_into().unwrap();
     let secret = hash(['SECRET'].span());
@@ -270,7 +269,6 @@ fn test_compute_contract_note_id_different_inputs() {
         :pool_address,
         :sender_addr,
         :contract_address,
-        :contract_class_hash,
         :policy_commitment,
         :token,
         :secret,
@@ -284,7 +282,6 @@ fn test_compute_contract_note_id_different_inputs() {
             :pool_address,
             sender_addr: other_sender_addr,
             :contract_address,
-            :contract_class_hash,
             :policy_commitment,
             :token,
             :secret,
@@ -297,7 +294,6 @@ fn test_compute_contract_note_id_different_inputs() {
             :pool_address,
             :sender_addr,
             :contract_address,
-            :contract_class_hash,
             :policy_commitment,
             :token,
             secret: other_secret,
@@ -310,7 +306,6 @@ fn test_compute_contract_note_id_different_inputs() {
             :pool_address,
             :sender_addr,
             :contract_address,
-            :contract_class_hash,
             :policy_commitment,
             :token,
             :secret,
@@ -330,7 +325,6 @@ fn test_compute_contract_note_commitment_hides_amount_and_secret() {
     let pool_address = hash(['POOL_ADDRESS'].span()).try_into().unwrap();
     let note_id = hash(['NOTE_ID'].span());
     let contract_address = hash(['CONTRACT_ADDRESS'].span()).try_into().unwrap();
-    let contract_class_hash = hash(['CONTRACT_CLASS'].span()).try_into().unwrap();
     let policy_commitment = hash(['POLICY_COMMITMENT'].span());
     let token = hash(['TOKEN'].span()).try_into().unwrap();
     let amount: u128 = 42;
@@ -340,7 +334,6 @@ fn test_compute_contract_note_commitment_hides_amount_and_secret() {
         :pool_address,
         :note_id,
         :contract_address,
-        :contract_class_hash,
         :policy_commitment,
         :token,
         :amount,
@@ -353,7 +346,6 @@ fn test_compute_contract_note_commitment_hides_amount_and_secret() {
             :pool_address,
             :note_id,
             :contract_address,
-            :contract_class_hash,
             :policy_commitment,
             :token,
             amount: amount + 1,
@@ -367,7 +359,6 @@ fn test_compute_contract_note_commitment_hides_amount_and_secret() {
             :pool_address,
             :note_id,
             :contract_address,
-            :contract_class_hash,
             :policy_commitment,
             :token,
             :amount,

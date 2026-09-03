@@ -38,7 +38,6 @@ export type EncPrivateKey = {
 export type ContractNote = {
   note_commitment: BigNumberish;
   contract_address: BigNumberish;
-  contract_class_hash: BigNumberish;
   policy_commitment: BigNumberish;
   token: BigNumberish;
 };

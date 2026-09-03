@@ -97,8 +97,9 @@ The `secret` and amount opening are secret prover inputs. Generate the secret wi
 randomness, retain it until spend, and never log or publish it.
 The contract-note callback must verify the pool caller, call `validate_contract_note_context`, and
 bind any stored authorization to `actions_hash`; checking only the policy commitment does not
-constrain where the controlled value goes. A class-hash binding catches direct contract replacement,
-but proxy contracts must enforce their own immutable policy/version commitment.
+constrain where the controlled value goes. Contract notes remain bound to the application contract
+address across upgrades. Applications must preserve the callback ABI and policy semantics needed by
+outstanding notes, and can disable upgrades when immutability is required.
 
 ### State management: go stateless
 

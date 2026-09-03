@@ -20,7 +20,7 @@ use privacy::utils::{
     encrypt_outgoing_channel_info, encrypt_private_key, encrypt_subchannel_info, encrypt_user_addr,
 };
 use snforge_std::map_entry_address;
-use starknet::{ClassHash, ContractAddress};
+use starknet::ContractAddress;
 
 // Test inputs - must match sdk/tests/fixtures/cairo-reference-data.json
 const SENDER: felt252 = 0x123;
@@ -41,16 +41,11 @@ const USER_PRIVATE_KEY: felt252 = 0x888;
 const CONTRACT_NOTE_CHAIN_ID: felt252 = 0x1111;
 const CONTRACT_NOTE_POOL: felt252 = 0x2222;
 const CONTRACT_ADDRESS: felt252 = 0x3333;
-const CONTRACT_CLASS_HASH: felt252 = 0x4444;
 const POLICY_COMMITMENT: felt252 = 0x5555;
 const CONTRACT_NOTE_SECRET: felt252 = 0x6666;
 
 fn to_address(addr: felt252) -> ContractAddress {
     addr.try_into().unwrap()
-}
-
-fn to_class_hash(value: felt252) -> ClassHash {
-    value.try_into().unwrap()
 }
 
 #[test]
@@ -78,7 +73,6 @@ fn generate_reference_hashes() {
         pool_address: to_address(CONTRACT_NOTE_POOL),
         sender_addr: sender,
         contract_address: to_address(CONTRACT_ADDRESS),
-        contract_class_hash: to_class_hash(CONTRACT_CLASS_HASH),
         policy_commitment: POLICY_COMMITMENT,
         token: token,
         secret: CONTRACT_NOTE_SECRET,
@@ -88,7 +82,6 @@ fn generate_reference_hashes() {
         pool_address: to_address(CONTRACT_NOTE_POOL),
         note_id: contract_note_id,
         contract_address: to_address(CONTRACT_ADDRESS),
-        contract_class_hash: to_class_hash(CONTRACT_CLASS_HASH),
         policy_commitment: POLICY_COMMITMENT,
         token: token,
         amount: AMOUNT,
@@ -172,7 +165,6 @@ fn generate_reference_hashes() {
     println!("inputs.contractNoteChainId: 0x{:x}", CONTRACT_NOTE_CHAIN_ID);
     println!("inputs.contractNotePool: 0x{:x}", CONTRACT_NOTE_POOL);
     println!("inputs.contractAddress: 0x{:x}", CONTRACT_ADDRESS);
-    println!("inputs.contractClassHash: 0x{:x}", CONTRACT_CLASS_HASH);
     println!("inputs.policyCommitment: 0x{:x}", POLICY_COMMITMENT);
     println!("inputs.contractNoteSecret: 0x{:x}", CONTRACT_NOTE_SECRET);
 

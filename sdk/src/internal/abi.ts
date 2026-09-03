@@ -604,10 +604,6 @@ export const PrivacyPoolABI = [
         "type": "core::felt252"
       },
       {
-        "name": "contract_class_hash",
-        "type": "core::starknet::class_hash::ClassHash"
-      },
-      {
         "name": "token",
         "type": "core::starknet::contract_address::ContractAddress"
       },
@@ -632,10 +628,6 @@ export const PrivacyPoolABI = [
       {
         "name": "policy_commitment",
         "type": "core::felt252"
-      },
-      {
-        "name": "contract_class_hash",
-        "type": "core::starknet::class_hash::ClassHash"
       },
       {
         "name": "token",
@@ -920,10 +912,6 @@ export const PrivacyPoolABI = [
       {
         "name": "contract_address",
         "type": "core::starknet::contract_address::ContractAddress"
-      },
-      {
-        "name": "contract_class_hash",
-        "type": "core::starknet::class_hash::ClassHash"
       },
       {
         "name": "policy_commitment",
@@ -2148,11 +2136,6 @@ export const PrivacyPoolABI = [
         "kind": "key"
       },
       {
-        "name": "contract_class_hash",
-        "type": "core::starknet::class_hash::ClassHash",
-        "kind": "data"
-      },
-      {
         "name": "token",
         "type": "core::starknet::contract_address::ContractAddress",
         "kind": "data"
@@ -2183,11 +2166,6 @@ export const PrivacyPoolABI = [
         "name": "policy_commitment",
         "type": "core::felt252",
         "kind": "key"
-      },
-      {
-        "name": "contract_class_hash",
-        "type": "core::starknet::class_hash::ClassHash",
-        "kind": "data"
       },
       {
         "name": "token",

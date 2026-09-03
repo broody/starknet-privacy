@@ -53,12 +53,12 @@ pub mod Privacy {
         StorageBaseAddress, storage_address_from_base_and_offset, storage_base_address_from_felt252,
     };
     use starknet::syscalls::{
-        call_contract_syscall, get_class_hash_at_syscall, get_execution_info_v3_syscall,
-        storage_read_syscall, storage_write_syscall,
+        call_contract_syscall, get_execution_info_v3_syscall, storage_read_syscall,
+        storage_write_syscall,
     };
     use starknet::{
-        ClassHash, ContractAddress, SyscallResultTrait, VALIDATED, get_block_timestamp,
-        get_caller_address, get_contract_address, get_execution_info,
+        ContractAddress, SyscallResultTrait, VALIDATED, get_block_timestamp, get_caller_address,
+        get_contract_address, get_execution_info,
     };
     use starkware_utils::components::common_roles::CommonRolesComponent;
     use starkware_utils::components::common_roles::CommonRolesComponent::InternalTrait as CommonRolesInternalTrait;
@@ -746,14 +746,11 @@ pub mod Privacy {
             let execution_info = get_execution_info();
             let chain_id = execution_info.tx_info.chain_id;
             let pool_address = get_contract_address();
-            let contract_class_hash = get_class_hash_at_syscall(contract_address).unwrap_syscall();
-            assert(contract_class_hash.is_non_zero(), errors::CONTRACT_CLASS_MISMATCH);
             let note_id = compute_contract_note_id(
                 :chain_id,
                 :pool_address,
                 :sender_addr,
                 :contract_address,
-                :contract_class_hash,
                 :policy_commitment,
                 :token,
                 :secret,
@@ -763,7 +760,6 @@ pub mod Privacy {
                 :pool_address,
                 :note_id,
                 :contract_address,
-                :contract_class_hash,
                 :policy_commitment,
                 :token,
                 :amount,
@@ -776,12 +772,7 @@ pub mod Privacy {
             array![
                 ServerAction::CreateContractNote(
                     events::ContractNoteCreated {
-                        note_id,
-                        contract_address,
-                        policy_commitment,
-                        contract_class_hash,
-                        token,
-                        note_commitment,
+                        note_id, contract_address, policy_commitment, token, note_commitment,
                     },
                 ),
             ]
@@ -803,7 +794,6 @@ pub mod Privacy {
                 :pool_address,
                 :note_id,
                 contract_address: note.contract_address,
-                contract_class_hash: note.contract_class_hash,
                 policy_commitment: note.policy_commitment,
                 token: note.token,
                 :amount,
@@ -824,7 +814,6 @@ pub mod Privacy {
                         nullifier,
                         contract_address: note.contract_address,
                         policy_commitment: note.policy_commitment,
-                        contract_class_hash: note.contract_class_hash,
                         token: note.token,
                     },
                 ),
@@ -991,8 +980,7 @@ pub mod Privacy {
         fn _apply_actions(
             ref self: ContractState, actions: Span<ServerAction>,
         ) -> Option<ContractAddress> {
-            let (contract_address, contract_class_hash) = self
-                ._collect_contract_note_actions(:actions);
+            let contract_address = self._collect_contract_note_actions(:actions);
             let execution_info = get_execution_info();
             let mut serialized_actions = array![];
             actions.serialize(ref serialized_actions);
@@ -1023,7 +1011,6 @@ pub mod Privacy {
                                 standard_selector: INVOKE_SELECTOR,
                                 contract_note_selector: CONTRACT_NOTE_INVOKE_SELECTOR,
                                 :contract_address,
-                                :contract_class_hash,
                                 :contract_note_context,
                                 ref :contract_note_callback_applied,
                             );
@@ -1043,7 +1030,6 @@ pub mod Privacy {
                                 standard_selector: INVOKE_WITH_COMPUTATION_SELECTOR,
                                 contract_note_selector: CONTRACT_NOTE_INVOKE_WITH_COMPUTATION_SELECTOR,
                                 :contract_address,
-                                :contract_class_hash,
                                 :contract_note_context,
                                 ref :contract_note_callback_applied,
                             );
@@ -1085,51 +1071,37 @@ pub mod Privacy {
 
         fn _collect_contract_note_actions(
             self: @ContractState, actions: Span<ServerAction>,
-        ) -> (Option<ContractAddress>, Option<ClassHash>) {
+        ) -> Option<ContractAddress> {
             let mut contract_address: Option<ContractAddress> = None;
-            let mut contract_class_hash: Option<ClassHash> = None;
             for action in actions {
                 match *action {
                     ServerAction::CreateContractNote(event) => {
                         self
                             ._unify_note_contract(
-                                ref :contract_address,
-                                ref :contract_class_hash,
-                                reference_address: event.contract_address,
-                                reference_class_hash: event.contract_class_hash,
+                                ref :contract_address, reference_address: event.contract_address,
                             );
                     },
                     ServerAction::UseContractNote(event) => {
                         self
                             ._unify_note_contract(
-                                ref :contract_address,
-                                ref :contract_class_hash,
-                                reference_address: event.contract_address,
-                                reference_class_hash: event.contract_class_hash,
+                                ref :contract_address, reference_address: event.contract_address,
                             );
                     },
                     _ => {},
                 }
             }
-            (contract_address, contract_class_hash)
+            contract_address
         }
 
         fn _unify_note_contract(
             self: @ContractState,
             ref contract_address: Option<ContractAddress>,
-            ref contract_class_hash: Option<ClassHash>,
             reference_address: ContractAddress,
-            reference_class_hash: ClassHash,
         ) {
             if let Some(existing_address) = contract_address {
                 assert(existing_address == reference_address, errors::MULTIPLE_NOTE_CONTRACTS);
-                assert(
-                    contract_class_hash.unwrap() == reference_class_hash,
-                    errors::CONTRACT_CLASS_MISMATCH,
-                );
             } else {
                 contract_address = Option::Some(reference_address);
-                contract_class_hash = Option::Some(reference_class_hash);
             }
         }
 
@@ -1139,7 +1111,6 @@ pub mod Privacy {
             standard_selector: felt252,
             contract_note_selector: felt252,
             contract_address: Option<ContractAddress>,
-            contract_class_hash: Option<ClassHash>,
             contract_note_context: ContractNoteContext,
             ref contract_note_callback_applied: bool,
         ) -> (felt252, Option<ContractNoteContext>) {
@@ -1147,12 +1118,6 @@ pub mod Privacy {
                 assert(
                     input.contract_address == required_address,
                     errors::CONTRACT_NOTE_TARGET_MISMATCH,
-                );
-                let current_class_hash = get_class_hash_at_syscall(required_address)
-                    .unwrap_syscall();
-                assert(
-                    current_class_hash == contract_class_hash.unwrap(),
-                    errors::CONTRACT_CLASS_MISMATCH,
                 );
                 contract_note_callback_applied = true;
                 (contract_note_selector, Option::Some(contract_note_context))
@@ -1216,12 +1181,7 @@ pub mod Privacy {
             ref self: ContractState, event: events::ContractNoteCreated,
         ) {
             let events::ContractNoteCreated {
-                note_id,
-                contract_address,
-                policy_commitment,
-                contract_class_hash,
-                token,
-                note_commitment,
+                note_id, contract_address, policy_commitment, token, note_commitment,
             } = event;
             assert(
                 self.contract_notes.read(note_id).note_commitment.is_zero(), errors::NON_ZERO_VALUE,
@@ -1230,24 +1190,17 @@ pub mod Privacy {
                 .contract_notes
                 .entry(note_id)
                 .write(
-                    ContractNote {
-                        note_commitment,
-                        contract_address,
-                        contract_class_hash,
-                        policy_commitment,
-                        token,
-                    },
+                    ContractNote { note_commitment, contract_address, policy_commitment, token },
                 );
         }
 
         fn _apply_contract_note_used(ref self: ContractState, event: events::ContractNoteUsed) {
             let events::ContractNoteUsed {
-                nullifier, contract_address, policy_commitment, contract_class_hash, token,
+                nullifier, contract_address, policy_commitment, token,
             } = event;
             assert(nullifier.is_non_zero(), errors::ZERO_NOTE_ID);
             assert(contract_address.is_non_zero(), errors::ZERO_CONTRACT_ADDRESS);
             assert(policy_commitment.is_non_zero(), errors::ZERO_POLICY_COMMITMENT);
-            assert(contract_class_hash.is_non_zero(), errors::CONTRACT_CLASS_MISMATCH);
             assert(token.is_non_zero(), errors::ZERO_TOKEN);
             let nullifier_entry = self.contract_note_nullifiers.entry(nullifier);
             assert(!nullifier_entry.read(), errors::NON_ZERO_VALUE);

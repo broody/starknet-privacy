@@ -1,7 +1,7 @@
 use core::dict::{Felt252Dict, Felt252DictEntryTrait, SquashedFelt252Dict, SquashedFelt252DictTrait};
 use core::num::traits::{CheckedSub, Zero};
 use privacy::errors;
-use starknet::{ClassHash, ContractAddress};
+use starknet::ContractAddress;
 
 pub(crate) type TokenBalances = Felt252Dict<u128>;
 pub(crate) type SquashedTokenBalances = SquashedFelt252Dict<u128>;
@@ -142,10 +142,6 @@ pub struct ContractNote {
     pub note_commitment: felt252,
     /// Contract that must authorize creation and every spend.
     pub contract_address: ContractAddress,
-    /// Class hash bound when the note is created. A direct class replacement freezes the note.
-    /// This cannot detect implementation changes behind a proxy; the policy commitment and
-    /// callback must enforce any application-level version binding.
-    pub contract_class_hash: ClassHash,
     /// Application-specific commitment interpreted by the authorizing contract.
     pub policy_commitment: felt252,
     /// ERC20 token held by the note.
