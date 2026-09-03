@@ -77,7 +77,8 @@ all note and application state if authorization or funding fails.
 
 Use `createEscrowNote` and `useEscrowNote` when the amount must remain private. For example, Whisper
 uses private-value escrow notes to keep sealed bids private while its auction contract controls
-settlement and refunds.
+settlement and refunds. Creation publishes only the controller and a hiding commitment; provide the
+same policy commitment again when spending so the pool can verify the private opening.
 
 ```typescript
 await transfers
@@ -90,6 +91,21 @@ await transfers
     amount: bidAmount,
     secret: privateRandomSecret,
   })
+  .done()
+  .invoke(() => ({ contractAddress: auction, calldata: [auctionId] }))
+  .execute();
+
+await transfers
+  .build()
+  .with(STRK)
+  .useEscrowNote({
+    noteId: escrowNoteId,
+    contractAddress: auction,
+    policyCommitment: settlementCommitment,
+    amount: bidAmount,
+    secret: privateRandomSecret,
+  })
+  .withdraw({ amount: bidAmount })
   .done()
   .invoke(() => ({ contractAddress: auction, calldata: [auctionId] }))
   .execute();
@@ -117,9 +133,11 @@ await transfers
   .execute();
 ```
 
-The `secret` is always a secret prover input. The `EscrowNote` amount is private; the
-`OpenEscrowNote` amount is public and checked against pool state. Generate secrets with
-cryptographic randomness, retain them until spend, and never log or publish them.
+The `EscrowNote` token, amount, policy, and `secret` are private prover inputs at creation. Its spend
+reveals the token and policy, but not the consumed note ID; use a shared controller and keep
+note-specific openings out of public application calldata to preserve an anonymity set. The
+`OpenEscrowNote` token, policy, note ID, and amount are public and explicitly linkable. Generate
+secrets with cryptographic randomness, retain them until spend, and never log or publish them.
 The escrow callback must verify the pool caller, call `validate_escrow_invoke_context`, and
 bind any stored authorization to `actions_hash`; checking only the policy commitment does not
 constrain where the controlled value goes. It returns an `EscrowInvokeResult`; for each new

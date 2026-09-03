@@ -761,15 +761,13 @@ pub mod Privacy {
             assert(note_commitment.is_non_zero(), internal_errors::ZERO_NOTE_VALUE);
 
             token_balances.subtract_balance(:token, :amount);
-            let note = EscrowNote { note_commitment, contract_address, policy_commitment, token };
+            let note = EscrowNote { note_commitment, contract_address };
             let storage_address = storage_path_to_felt252(path: self.escrow_notes.entry(note_id));
 
             array![
                 to_write_once_action(:storage_address, value: note),
                 ServerAction::EmitEscrowNoteCreated(
-                    events::EscrowNoteCreated {
-                        note_id, contract_address, policy_commitment, token, note_commitment,
-                    },
+                    events::EscrowNoteCreated { note_id, contract_address, note_commitment },
                 ),
             ]
         }
@@ -779,14 +777,14 @@ pub mod Privacy {
             self: @ContractState, input: UseEscrowNoteInput, ref token_balances: TokenBalances,
         ) -> Array<ServerAction> {
             input.assert_valid();
-            let UseEscrowNoteInput { note_id, amount, secret } = input;
+            let UseEscrowNoteInput { note_id, policy_commitment, token, amount, secret } = input;
             let note = self.escrow_notes.read(note_id);
             assert(note.note_commitment.is_non_zero(), errors::ESCROW_NOTE_NOT_FOUND);
             let expected_commitment = compute_escrow_note_commitment(
                 :note_id,
                 contract_address: note.contract_address,
-                policy_commitment: note.policy_commitment,
-                token: note.token,
+                :policy_commitment,
+                :token,
                 :amount,
                 :secret,
             );
@@ -795,7 +793,7 @@ pub mod Privacy {
             );
             let nullifier = compute_escrow_note_nullifier(:note_id, :secret);
 
-            token_balances.add_balance(token: note.token, :amount);
+            token_balances.add_balance(:token, :amount);
             let storage_address = storage_path_to_felt252(path: self.nullifiers.entry(nullifier));
 
             array![
@@ -804,8 +802,8 @@ pub mod Privacy {
                     events::EscrowNoteUsed {
                         nullifier,
                         contract_address: note.contract_address,
-                        policy_commitment: note.policy_commitment,
-                        token: note.token,
+                        policy_commitment,
+                        token,
                     },
                 ),
             ]

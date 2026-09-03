@@ -149,9 +149,7 @@ fn test_note_to_write_once_action() {
 fn test_escrow_note_to_write_once_action() {
     let note_commitment = 'NOTE_COMMITMENT';
     let contract_address: ContractAddress = 'CONTRACT_ADDRESS'.try_into().unwrap();
-    let policy_commitment = 'POLICY_COMMITMENT';
-    let token: ContractAddress = 'TOKEN'.try_into().unwrap();
-    let note = EscrowNote { note_commitment, contract_address, policy_commitment, token };
+    let note = EscrowNote { note_commitment, contract_address };
     let storage_address = map_entry_address(
         map_selector: selector!("escrow_notes"), keys: ['KEY'].span(),
     );
@@ -160,9 +158,7 @@ fn test_escrow_note_to_write_once_action() {
         to_write_once_action(:storage_address, value: note),
         ServerAction::WriteOnce(
             WriteOnceInput {
-                storage_address,
-                value: [note_commitment, contract_address.into(), policy_commitment, token.into()]
-                    .span(),
+                storage_address, value: [note_commitment, contract_address.into()].span(),
             },
         ),
     );

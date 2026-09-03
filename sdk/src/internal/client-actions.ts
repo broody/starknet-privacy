@@ -82,6 +82,8 @@ export type CreateEscrowNoteInput = {
 
 export type UseEscrowNoteInput = {
   note_id: bigint;
+  policy_commitment: bigint;
+  token: StarknetAddressBigint;
   amount: bigint;
   secret: bigint;
 };

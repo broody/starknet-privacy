@@ -92,6 +92,7 @@ export class TokenOperationsBuilderImpl implements TokenOperationsBuilder {
       this.useEscrowNotes.push({
         token: this.token,
         noteId: note.noteId,
+        policyCommitment: note.policyCommitment,
         amount: note.amount,
         secret: note.secret,
         contractAddress: note.contractAddress,

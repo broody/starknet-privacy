@@ -400,14 +400,19 @@ export class ActionCompiler {
     if (actions.useEscrowNotes) {
       for (const action of actions.useEscrowNotes) {
         const noteId = toBigInt(action.noteId);
+        const policyCommitment = toBigInt(action.policyCommitment);
         const secret = toBigInt(action.secret);
         assert(noteId !== 0n, () => "Escrow note ID must be non-zero");
+        assert(policyCommitment !== 0n, () => "Escrow note policy commitment must be non-zero");
+        assert(action.token !== 0n, () => "Escrow note token must be non-zero");
         assert(action.amount > 0n, () => "Escrow note amount must be positive");
         assert(secret !== 0n, () => "Escrow note secret must be non-zero");
         const input = {
           type: "UseEscrowNote",
           input: {
             note_id: noteId,
+            policy_commitment: policyCommitment,
+            token: action.token,
             amount: action.amount,
             secret,
           },
@@ -771,8 +776,7 @@ export class ActionCompiler {
       }
     }
 
-    // The token is local planning metadata. The pool reads and verifies it from the committed
-    // escrow note when compiling the private transaction.
+    // The token is both local planning metadata and a private opening verified by the pool.
     if (actions.useEscrowNotes) {
       for (const note of actions.useEscrowNotes) {
         assert(note.amount > 0n, () => `Escrow note ${note.noteId}: amount must be positive`);

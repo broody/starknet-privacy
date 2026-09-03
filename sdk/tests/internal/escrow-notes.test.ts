@@ -69,8 +69,6 @@ describe("escrow note builder", () => {
         secret
       ),
       contract_address: controller,
-      policy_commitment: policyCommitment,
-      token,
     });
 
     const spend = () =>
@@ -79,6 +77,7 @@ describe("escrow note builder", () => {
         .with(token)
         .useEscrowNote({
           noteId,
+          policyCommitment,
           amount: 37n,
           secret,
           contractAddress: controller,
@@ -143,6 +142,7 @@ describe("escrow note builder", () => {
       .with(env.ace)
       .useEscrowNote({
         noteId: 123n,
+        policyCommitment: 91n,
         amount: 37n,
         secret: 456n,
         contractAddress: CONTROLLER,
@@ -152,10 +152,30 @@ describe("escrow note builder", () => {
       .invoke(() => ({ contractAddress: CONTROLLER, calldata: [] }))
       .createProofInvocation();
 
-    expect(clientActions(result.invocation.calldata).map((action) => action.type)).toEqual([
-      "UseEscrowNote",
-      "Withdraw",
-      "InvokeExternal",
+    expect(clientActions(result.invocation.calldata)).toEqual([
+      {
+        type: "UseEscrowNote",
+        input: {
+          note_id: 123n,
+          policy_commitment: 91n,
+          token: toBigInt(env.ace),
+          amount: 37n,
+          secret: 456n,
+        },
+      },
+      {
+        type: "Withdraw",
+        input: {
+          to_addr: toBigInt(env.alice.address),
+          token: toBigInt(env.ace),
+          amount: 37n,
+          random: expect.anything(),
+        },
+      },
+      {
+        type: "InvokeExternal",
+        input: { contract_address: 0xabcn, calldata: [] },
+      },
     ]);
   });
 
@@ -239,6 +259,7 @@ describe("escrow note builder", () => {
       .with(env.ace)
       .useEscrowNote({
         noteId: 123n,
+        policyCommitment: 91n,
         amount: 37n,
         secret: 456n,
         contractAddress: CONTROLLER,
@@ -259,6 +280,7 @@ describe("escrow note builder", () => {
       .with(env.ace)
       .useEscrowNote({
         noteId: 123n,
+        policyCommitment: 91n,
         amount: 18n,
         secret: 456n,
         contractAddress: CONTROLLER,

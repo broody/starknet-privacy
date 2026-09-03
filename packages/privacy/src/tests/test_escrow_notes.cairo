@@ -141,7 +141,13 @@ fn spend_actions(
         .execute(
             [
                 ClientAction::UseEscrowNote(
-                    UseEscrowNoteInput { note_id, amount: AMOUNT, secret: SECRET },
+                    UseEscrowNoteInput {
+                        note_id,
+                        policy_commitment: POLICY_COMMITMENT,
+                        token: output.token,
+                        amount: AMOUNT,
+                        secret: SECRET,
+                    },
                 ),
                 ClientAction::CreateEncNote(output),
                 ClientAction::InvokeExternal(
@@ -195,12 +201,7 @@ fn test_escrow_note_lifecycle_binds_exact_actions_and_authorizes_atomically() {
     assert_eq!(controller_dispatcher.last_spent_nullifier(), 0);
     assert_eq!(
         test.privacy.get_escrow_note(note_id: created.note_id),
-        EscrowNote {
-            note_commitment: created.note_commitment,
-            contract_address: controller,
-            policy_commitment: POLICY_COMMITMENT,
-            token,
-        },
+        EscrowNote { note_commitment: created.note_commitment, contract_address: controller },
     );
 
     let actions = spend_actions(@user, note_id: created.note_id, :output, :controller);
@@ -287,7 +288,13 @@ fn test_escrow_note_spend_requires_callback_and_rolls_back() {
         .execute(
             [
                 ClientAction::UseEscrowNote(
-                    UseEscrowNoteInput { note_id: created.note_id, amount: AMOUNT, secret: SECRET },
+                    UseEscrowNoteInput {
+                        note_id: created.note_id,
+                        policy_commitment: POLICY_COMMITMENT,
+                        token,
+                        amount: AMOUNT,
+                        secret: SECRET,
+                    },
                 ),
                 ClientAction::CreateEncNote(output),
             ]
@@ -334,6 +341,7 @@ fn test_escrow_note_spend_rejects_invalid_private_opening() {
     let mut test: Test = Default::default();
     let mut user = test.new_user();
     let (token, use_source, _) = source_note(ref test, ref user);
+    let other_token = test.mock_new_token();
     let controller = deploy_mock_note_controller(
         pool_address: test.privacy.address, allowed: true, salt: 0,
     );
@@ -344,7 +352,11 @@ fn test_escrow_note_spend_rejects_invalid_private_opening() {
             [
                 ClientAction::UseEscrowNote(
                     UseEscrowNoteInput {
-                        note_id: created.note_id, amount: AMOUNT + 1, secret: SECRET,
+                        note_id: created.note_id,
+                        policy_commitment: POLICY_COMMITMENT,
+                        token,
+                        amount: AMOUNT + 1,
+                        secret: SECRET,
                     },
                 ),
             ]
@@ -357,8 +369,42 @@ fn test_escrow_note_spend_rejects_invalid_private_opening() {
                 ClientAction::UseEscrowNote(
                     UseEscrowNoteInput {
                         note_id: created.note_id,
+                        policy_commitment: POLICY_COMMITMENT,
+                        token,
                         amount: AMOUNT,
                         secret: 'WRONG_PRIVATE_NOTE_SECRET',
+                    },
+                ),
+            ]
+                .span(),
+            expected_error: errors::INVALID_ESCROW_NOTE_OPENING,
+        );
+    user
+        .assert_actions_panic(
+            [
+                ClientAction::UseEscrowNote(
+                    UseEscrowNoteInput {
+                        note_id: created.note_id,
+                        policy_commitment: 'WRONG_POLICY',
+                        token,
+                        amount: AMOUNT,
+                        secret: SECRET,
+                    },
+                ),
+            ]
+                .span(),
+            expected_error: errors::INVALID_ESCROW_NOTE_OPENING,
+        );
+    user
+        .assert_actions_panic(
+            [
+                ClientAction::UseEscrowNote(
+                    UseEscrowNoteInput {
+                        note_id: created.note_id,
+                        policy_commitment: POLICY_COMMITMENT,
+                        token: other_token,
+                        amount: AMOUNT,
+                        secret: SECRET,
                     },
                 ),
             ]

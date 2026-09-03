@@ -114,12 +114,7 @@ pub struct EscrowNoteCreated {
     /// The address of the application contract enforcing the note policy.
     #[key]
     pub contract_address: ContractAddress,
-    /// The application-specific policy commitment.
-    #[key]
-    pub policy_commitment: felt252,
-    /// The note's token. Escrow-note token types are intentionally public to the contract.
-    pub token: ContractAddress,
-    /// Hiding commitment to the private amount and blinding.
+    /// Hiding commitment to the token, amount, policy, and private blinding.
     pub note_commitment: felt252,
 }
 
@@ -131,7 +126,7 @@ pub struct EscrowNoteUsed {
     /// The address of the application contract that authorized the spend.
     #[key]
     pub contract_address: ContractAddress,
-    /// Application-specific policy commitment bound at creation.
+    /// Application policy revealed only when the note is spent; pool creation metadata hides it.
     #[key]
     pub policy_commitment: felt252,
     /// Token released into the private transaction's conservation balance.

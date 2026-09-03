@@ -47,14 +47,18 @@ Actions must be ordered by phase. Actions within the same phase can appear in an
 
 Escrow notes are contract-governed notes with two explicit value modes:
 
-- `EscrowNote` commits to a private amount supplied from the private transaction balance. Its
-  `secret` domain-separately derives the note-ID nonce and amount blinding.
+- `EscrowNote` commits to a private token, amount, policy, and secret-derived blinding. Creation
+  stores and emits only its note ID, governing contract, and hiding commitment. A spend privately
+  opens the commitment, then emits the policy and token without revealing the consumed note ID.
 - `OpenEscrowNote` stores a public amount supplied by the application callback. It is created
-  pending with amount zero and must be funded exactly once in the same transaction.
+  pending with amount zero and must be funded exactly once in the same transaction. Its note ID,
+  policy, token, and eventual deposit are public and therefore intentionally linkable.
 
-Both modes require knowledge of a private secret to spend and emit a secret-derived nullifier. The
-pool does not generically reveal which creation a spend consumed, although public amounts and
-application-level `policy_commitment` values can make open escrow notes linkable.
+Both modes require knowledge of a private secret to spend and emit a secret-derived nullifier. For
+private-value notes, observers can group creation and spend transactions by the governing contract,
+but cannot match a particular creation to its spend from pool metadata. A per-note controller or
+unique metadata published by the application recreates that link; use a shared controller and keep
+note-specific openings out of public invoke calldata when an anonymity set is required.
 
 Every transaction that creates or spends escrow notes must contain exactly one invoke-phase
 action targeting their application contract. The pool changes the selector to
@@ -72,7 +76,9 @@ The callback's successful return authorizes the complete transaction atomically.
 contracts must:
 
 - assert that the caller is the expected privacy pool and read the chain ID from transaction context;
-- validate the application-specific `policy_commitment` in the serialized actions;
+- validate application policy exposed by the serialized actions. Private `EscrowNote` creation
+  intentionally exposes neither policy nor token, so its callback can authorize only the opaque
+  note creation and any application data deliberately included in invoke calldata;
 - call `validate_escrow_invoke_context` to authenticate and deserialize `serialized_actions`,
   enforce the permitted asset disposition, and bind any stored authorization to `actions_hash`; and
 - return exactly one serialized `EscrowInvokeResult`:
@@ -95,9 +101,10 @@ address across upgrades. Applications own their upgrade policy and must preserve
 and policy semantics needed by outstanding notes; they can disable upgrades when immutability is
 required.
 
-The `secret` is supplied to the prover. It must be generated with cryptographic randomness, retained
-by the party that will spend the note, and never placed in public calldata, events, logs, or
-application state.
+The private note's policy, token, amount, and `secret` are supplied to the prover at creation and
+again as openings at spend. The policy and token become public in the spend event; the amount and
+secret remain private. Generate secrets with cryptographic randomness, retain them until spend, and
+never place them in public calldata, events, logs, or application state.
 
 ## Cryptographic primitives
 

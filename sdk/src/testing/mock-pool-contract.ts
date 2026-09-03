@@ -146,8 +146,6 @@ export class MockPoolContract implements MockContract, PoolContractInterface {
       this.escrowNotes.get(noteId) ?? {
         note_commitment: 0n,
         contract_address: 0n,
-        policy_commitment: 0n,
-        token: 0n,
       }
     );
   }
@@ -947,8 +945,6 @@ export class MockPoolContract implements MockContract, PoolContractInterface {
         secret
       ),
       contract_address,
-      policy_commitment,
-      token,
     };
     return [
       {
@@ -963,14 +959,14 @@ export class MockPoolContract implements MockContract, PoolContractInterface {
   }
 
   private useEscrowNote(input: UseEscrowNoteInput): MockServerAction[] {
-    const { note_id, amount, secret } = input;
+    const { note_id, policy_commitment, token, amount, secret } = input;
     const note = this.escrowNotes.get(note_id);
     assert(note, () => `Escrow note ${note_id} does not exist`);
     const expectedCommitment = compute_escrow_note_commitment(
       note_id,
       toBigInt(note.contract_address),
-      toBigInt(note.policy_commitment),
-      toBigInt(note.token),
+      policy_commitment,
+      token,
       amount,
       secret
     );
@@ -1155,7 +1151,7 @@ export class MockPoolContract implements MockContract, PoolContractInterface {
         case "UseEscrowNote": {
           const note = this.escrowNotes.get(action.input.note_id);
           assert(note, () => `Escrow note ${action.input.note_id} does not exist`);
-          updateTotal(toBigInt(note.token), action.input.amount);
+          updateTotal(action.input.token, action.input.amount);
           break;
         }
 

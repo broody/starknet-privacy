@@ -282,6 +282,14 @@ export const PrivacyPoolABI = [
         "type": "core::felt252"
       },
       {
+        "name": "policy_commitment",
+        "type": "core::felt252"
+      },
+      {
+        "name": "token",
+        "type": "core::starknet::contract_address::ContractAddress"
+      },
+      {
         "name": "amount",
         "type": "core::integer::u128"
       },
@@ -648,14 +656,6 @@ export const PrivacyPoolABI = [
         "type": "core::starknet::contract_address::ContractAddress"
       },
       {
-        "name": "policy_commitment",
-        "type": "core::felt252"
-      },
-      {
-        "name": "token",
-        "type": "core::starknet::contract_address::ContractAddress"
-      },
-      {
         "name": "note_commitment",
         "type": "core::felt252"
       }
@@ -1019,14 +1019,6 @@ export const PrivacyPoolABI = [
       },
       {
         "name": "contract_address",
-        "type": "core::starknet::contract_address::ContractAddress"
-      },
-      {
-        "name": "policy_commitment",
-        "type": "core::felt252"
-      },
-      {
-        "name": "token",
         "type": "core::starknet::contract_address::ContractAddress"
       }
     ]
@@ -2263,16 +2255,6 @@ export const PrivacyPoolABI = [
         "name": "contract_address",
         "type": "core::starknet::contract_address::ContractAddress",
         "kind": "key"
-      },
-      {
-        "name": "policy_commitment",
-        "type": "core::felt252",
-        "kind": "key"
-      },
-      {
-        "name": "token",
-        "type": "core::starknet::contract_address::ContractAddress",
-        "kind": "data"
       },
       {
         "name": "note_commitment",

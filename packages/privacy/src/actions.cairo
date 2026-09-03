@@ -235,6 +235,10 @@ pub(crate) impl UseNoteInputValid of InputValidation<UseNoteInput> {
 pub struct UseEscrowNoteInput {
     /// Identifier emitted when the escrow note was created.
     pub note_id: felt252,
+    /// Application policy opening hidden by the note commitment until spend.
+    pub policy_commitment: felt252,
+    /// Token opening hidden by the note commitment until spend.
+    pub token: ContractAddress,
     /// Private amount opening.
     pub amount: u128,
     /// Private note secret retained by an authorized prover.
@@ -243,8 +247,10 @@ pub struct UseEscrowNoteInput {
 
 pub(crate) impl UseEscrowNoteInputValid of InputValidation<UseEscrowNoteInput> {
     fn assert_valid(self: UseEscrowNoteInput) {
-        let UseEscrowNoteInput { note_id, amount, secret } = self;
+        let UseEscrowNoteInput { note_id, policy_commitment, token, amount, secret } = self;
         assert(note_id.is_non_zero(), errors::ZERO_NOTE_ID);
+        assert(policy_commitment.is_non_zero(), errors::ZERO_POLICY_COMMITMENT);
+        assert(token.is_non_zero(), errors::ZERO_TOKEN);
         assert(amount.is_non_zero(), errors::ZERO_AMOUNT);
         assert(secret.is_non_zero(), errors::ZERO_ESCROW_NOTE_SECRET);
     }

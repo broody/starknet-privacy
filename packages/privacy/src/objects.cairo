@@ -138,14 +138,10 @@ pub struct OpenNoteDeposit {
 /// A confidential note whose spend policy is enforced by a contract callback.
 #[derive(Serde, Copy, Drop, PartialEq, Debug, starknet::Store)]
 pub struct EscrowNote {
-    /// Hiding commitment to the note amount and its secret-derived blinding.
+    /// Hiding commitment to the token, amount, policy, and secret-derived blinding.
     pub note_commitment: felt252,
     /// Contract that must authorize creation and every spend.
     pub contract_address: ContractAddress,
-    /// Application-specific commitment interpreted by the authorizing contract.
-    pub policy_commitment: felt252,
-    /// ERC20 token held by the note.
-    pub token: ContractAddress,
 }
 
 /// A publicly valued note whose spend policy is enforced by a contract callback.

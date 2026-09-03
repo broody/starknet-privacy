@@ -107,7 +107,15 @@ fn test_action_enum_discriminants_are_append_only() {
     );
     assert_eq!(
         client_action_variant(
-            ClientAction::UseEscrowNote(UseEscrowNoteInput { note_id: 1, amount: 1, secret: 1 }),
+            ClientAction::UseEscrowNote(
+                UseEscrowNoteInput {
+                    note_id: 1,
+                    policy_commitment: 1,
+                    token: 1.try_into().unwrap(),
+                    amount: 1,
+                    secret: 1,
+                },
+            ),
         ),
         11,
     );

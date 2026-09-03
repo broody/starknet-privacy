@@ -38,8 +38,6 @@ export type EncPrivateKey = {
 export type EscrowNote = {
   note_commitment: BigNumberish;
   contract_address: BigNumberish;
-  policy_commitment: BigNumberish;
-  token: BigNumberish;
 };
 
 export type OpenEscrowNote = {
