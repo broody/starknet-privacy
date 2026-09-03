@@ -1,6 +1,6 @@
 //! Escrow-note callback used to exercise escrow-note authorization and context binding.
 
-use privacy::objects::{EscrowNoteContext, EscrowNoteInvokeResult};
+use privacy::objects::{EscrowInvokeContext, EscrowInvokeResult};
 use starknet::ClassHash;
 
 #[starknet::interface]
@@ -13,9 +13,9 @@ pub trait IMockNoteController<T> {
     fn last_actions_hash(self: @T) -> felt252;
     fn last_created_note_id(self: @T) -> felt252;
     fn last_spent_nullifier(self: @T) -> felt252;
-    fn privacy_escrow_note_invoke(
-        ref self: T, context: EscrowNoteContext, marker: felt252,
-    ) -> EscrowNoteInvokeResult;
+    fn privacy_escrow_invoke(
+        ref self: T, context: EscrowInvokeContext, marker: felt252,
+    ) -> EscrowInvokeResult;
 }
 
 #[starknet::contract]
@@ -23,9 +23,9 @@ pub mod MockNoteController {
     use core::num::traits::Zero;
     use privacy::actions::ServerAction;
     use privacy::objects::{
-        EscrowNoteContext, EscrowNoteInvokeResult, OpenEscrowNoteDeposit, OpenNoteDeposit,
+        EscrowInvokeContext, EscrowInvokeResult, OpenEscrowNoteDeposit, OpenNoteDeposit,
     };
-    use privacy::utils::validate_escrow_note_context;
+    use privacy::utils::validate_escrow_invoke_context;
     use starknet::storage::{StoragePointerReadAccess, StoragePointerWriteAccess};
     use starknet::syscalls::replace_class_syscall;
     use starknet::{ClassHash, ContractAddress, SyscallResultTrait, get_caller_address};
@@ -89,9 +89,9 @@ pub mod MockNoteController {
             self.last_spent_nullifier.read()
         }
 
-        fn privacy_escrow_note_invoke(
-            ref self: ContractState, context: EscrowNoteContext, marker: felt252,
-        ) -> EscrowNoteInvokeResult {
+        fn privacy_escrow_invoke(
+            ref self: ContractState, context: EscrowInvokeContext, marker: felt252,
+        ) -> EscrowInvokeResult {
             let pool_address = get_caller_address();
             assert(pool_address == self.pool_address.read(), 'CALLER_NOT_POOL');
             assert(marker == CALLBACK_MARKER, 'WRONG_MARKER');
@@ -101,7 +101,7 @@ pub mod MockNoteController {
             if expected_actions_hash.is_non_zero() {
                 assert(context.actions_hash == expected_actions_hash, WRONG_ACTIONS_HASH);
             }
-            let actions = validate_escrow_note_context(context);
+            let actions = validate_escrow_invoke_context(context);
 
             let mut created_count: usize = 0;
             let mut spent_count: usize = 0;
@@ -150,7 +150,7 @@ pub mod MockNoteController {
                 self.open_escrow_deposit_amount.write(0);
             }
             let associated_addresses: Array<ContractAddress> = array![];
-            EscrowNoteInvokeResult {
+            EscrowInvokeResult {
                 open_note_deposits: open_note_deposits.span(),
                 open_escrow_note_deposits: open_escrow_note_deposits.span(),
                 associated_addresses: associated_addresses.span(),

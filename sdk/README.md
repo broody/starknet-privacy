@@ -120,9 +120,9 @@ await transfers
 The `secret` is always a secret prover input. The `EscrowNote` amount is private; the
 `OpenEscrowNote` amount is public and checked against pool state. Generate secrets with
 cryptographic randomness, retain them until spend, and never log or publish them.
-The escrow-note callback must verify the pool caller, call `validate_escrow_note_context`, and
+The escrow callback must verify the pool caller, call `validate_escrow_invoke_context`, and
 bind any stored authorization to `actions_hash`; checking only the policy commitment does not
-constrain where the controlled value goes. It returns an `EscrowNoteInvokeResult`; for each new
+constrain where the controlled value goes. It returns an `EscrowInvokeResult`; for each new
 `OpenEscrowNote`, this must contain a matching `OpenEscrowNoteDeposit`, and the application must
 approve the pool to pull that amount. Escrow notes remain bound to the application contract address
 across upgrades. Applications must preserve the callback ABI and policy semantics needed by

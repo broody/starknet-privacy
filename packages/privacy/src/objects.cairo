@@ -175,24 +175,24 @@ pub struct OpenEscrowNoteDeposit {
     pub amount: u128,
 }
 
-/// Pool-derived context prepended to an escrow-note callback's calldata.
+/// Pool-derived context prepended to an escrow callback's calldata.
 ///
 /// `actions_hash` commits to the exact proven server-action list. Application contracts should bind
 /// their policy decision to this value whenever output disposition matters.
 #[derive(Serde, Copy, Drop, PartialEq, Debug)]
-pub struct EscrowNoteContext {
+pub struct EscrowInvokeContext {
     pub actions_hash: felt252,
     /// Canonical Serde encoding of the exact `Span<ServerAction>` committed by `actions_hash`.
     /// Contracts can deserialize this to enforce output disposition without a prior state write.
     pub serialized_actions: Span<felt252>,
 }
 
-/// Exact return shape for escrow-note callbacks.
+/// Exact return shape for escrow callbacks.
 ///
 /// Regular invoke callbacks retain their existing return ABI. Escrow callbacks can atomically fund
 /// both recipient-owned open notes and contract-governed open escrow notes.
 #[derive(Serde, Copy, Drop)]
-pub struct EscrowNoteInvokeResult {
+pub struct EscrowInvokeResult {
     pub open_note_deposits: Span<OpenNoteDeposit>,
     pub open_escrow_note_deposits: Span<OpenEscrowNoteDeposit>,
     /// Addresses associated with delegated compute-and-invoke deposits. Empty otherwise.

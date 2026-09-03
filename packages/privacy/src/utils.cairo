@@ -18,7 +18,7 @@ use privacy::hashes::{
 };
 use privacy::objects::{
     EncChannelInfo, EncOutgoingChannelInfo, EncPrivateKey, EncSubchannelInfo, EncUserAddr,
-    EscrowNoteContext, EscrowNoteInvokeResult, Note, OpenNoteDeposit,
+    EscrowInvokeContext, EscrowInvokeResult, Note, OpenNoteDeposit,
 };
 use privacy::snip12::compute_call_set_hash;
 use privacy::utils::constants::{
@@ -94,13 +94,13 @@ pub mod constants {
     pub const INVOKE_WITH_COMPUTATION_SELECTOR: felt252 = selector!(
         "privacy_invoke_with_computation",
     );
-    /// Escrow-note-authorizing counterpart to `privacy_invoke`. The pool prepends a canonical
-    /// [`EscrowNoteContext`](privacy::objects::EscrowNoteContext) to the original invoke
+    /// Escrow-authorizing counterpart to `privacy_invoke`. The pool prepends a canonical
+    /// [`EscrowInvokeContext`](privacy::objects::EscrowInvokeContext) to the original invoke
     /// calldata.
-    pub const ESCROW_NOTE_INVOKE_SELECTOR: felt252 = selector!("privacy_escrow_note_invoke");
-    /// Escrow-note-authorizing counterpart to `privacy_invoke_with_computation`.
-    pub const ESCROW_NOTE_INVOKE_WITH_COMPUTATION_SELECTOR: felt252 = selector!(
-        "privacy_escrow_note_invoke_with_computation",
+    pub const ESCROW_INVOKE_SELECTOR: felt252 = selector!("privacy_escrow_invoke");
+    /// Escrow-authorizing counterpart to `privacy_invoke_with_computation`.
+    pub const ESCROW_INVOKE_WITH_COMPUTATION_SELECTOR: felt252 = selector!(
+        "privacy_escrow_invoke_with_computation",
     );
     /// STRK fee token address — same on all Starknet networks (mainnet, sepolia, devnet).
     pub const STRK_TOKEN_ADDRESS: ContractAddress =
@@ -588,23 +588,23 @@ pub(crate) fn compute_escrow_note_actions_hash(
     poseidon_hash_span(data.span())
 }
 
-/// Deserializes and authenticates the server-action list in an escrow-note callback.
+/// Deserializes and authenticates the server-action list in an escrow callback.
 ///
 /// The application contract must separately assert that `get_caller_address()` is its expected
 /// privacy pool. This helper binds the canonical action list to that caller and the current chain.
-pub fn validate_escrow_note_context(context: EscrowNoteContext) -> Span<ServerAction> {
-    let EscrowNoteContext { actions_hash, serialized_actions } = context;
+pub fn validate_escrow_invoke_context(context: EscrowInvokeContext) -> Span<ServerAction> {
+    let EscrowInvokeContext { actions_hash, serialized_actions } = context;
     let mut serialized_actions = serialized_actions;
     let actions: Span<ServerAction> = Serde::deserialize(ref serialized_actions)
-        .expect(errors::INVALID_ESCROW_NOTE_CONTEXT);
-    assert(serialized_actions.is_empty(), errors::INVALID_ESCROW_NOTE_CONTEXT);
+        .expect(errors::INVALID_ESCROW_CONTEXT);
+    assert(serialized_actions.is_empty(), errors::INVALID_ESCROW_CONTEXT);
     assert(
         actions_hash == compute_escrow_note_actions_hash(
             :actions,
             chain_id: get_execution_info().tx_info.chain_id,
             pool_address: get_caller_address(),
         ),
-        errors::INVALID_ESCROW_NOTE_CONTEXT,
+        errors::INVALID_ESCROW_CONTEXT,
     );
     actions
 }
@@ -643,11 +643,11 @@ pub(crate) fn deserialize_invoke_return_data(
     (deposits, Some(associated_addresses))
 }
 
-/// Deserializes the fixed return shape required from an escrow-note callback.
-pub(crate) fn deserialize_escrow_note_invoke_return_data(
+/// Deserializes the fixed return shape required from an escrow callback.
+pub(crate) fn deserialize_escrow_invoke_return_data(
     mut return_data: Span<felt252>,
-) -> EscrowNoteInvokeResult {
-    let result: EscrowNoteInvokeResult = Serde::deserialize(ref return_data)
+) -> EscrowInvokeResult {
+    let result: EscrowInvokeResult = Serde::deserialize(ref return_data)
         .expect(errors::INVALID_INVOKE_RETURN_DATA);
     assert(return_data.is_empty(), errors::INVALID_INVOKE_RETURN_DATA);
     result

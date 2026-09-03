@@ -58,11 +58,11 @@ application-level `policy_commitment` values can make open escrow notes linkable
 
 Every transaction that creates or spends escrow notes must contain exactly one invoke-phase
 action targeting their application contract. The pool changes the selector to
-`privacy_escrow_note_invoke` (or `privacy_escrow_note_invoke_with_computation`) and prepends a
-`EscrowNoteContext`:
+`privacy_escrow_invoke` (or `privacy_escrow_invoke_with_computation`) and prepends an
+`EscrowInvokeContext`:
 
 ```cairo
-pub struct EscrowNoteContext {
+pub struct EscrowInvokeContext {
     actions_hash: felt252,
     serialized_actions: Span<felt252>,
 }
@@ -73,12 +73,12 @@ contracts must:
 
 - assert that the caller is the expected privacy pool and read the chain ID from transaction context;
 - validate the application-specific `policy_commitment` in the serialized actions;
-- call `validate_escrow_note_context` to authenticate and deserialize `serialized_actions`,
+- call `validate_escrow_invoke_context` to authenticate and deserialize `serialized_actions`,
   enforce the permitted asset disposition, and bind any stored authorization to `actions_hash`; and
-- return exactly one serialized `EscrowNoteInvokeResult`:
+- return exactly one serialized `EscrowInvokeResult`:
 
 ```cairo
-pub struct EscrowNoteInvokeResult {
+pub struct EscrowInvokeResult {
     open_note_deposits: Span<OpenNoteDeposit>,
     open_escrow_note_deposits: Span<OpenEscrowNoteDeposit>,
     associated_addresses: Span<ContractAddress>,

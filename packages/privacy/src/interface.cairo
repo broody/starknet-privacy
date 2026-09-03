@@ -482,7 +482,7 @@ pub trait IServer<T> {
     /// [`INVOKE_SELECTOR`](privacy::utils::constants::INVOKE_SELECTOR) and retains its existing
     /// return ABI. A transaction containing escrow-note actions instead calls the dedicated escrow
     /// selector and must return an
-    /// [`EscrowNoteInvokeResult`](privacy::objects::EscrowNoteInvokeResult).
+    /// [`EscrowInvokeResult`](privacy::objects::EscrowInvokeResult).
     /// - Every address the tx's actions require screening for must be covered by a fresh, valid
     /// `screening` attestation, and the actions must not require more than one distinct address.
     /// A regular-pool deposit ([`TransferFrom`](privacy::actions::ServerAction::TransferFrom))

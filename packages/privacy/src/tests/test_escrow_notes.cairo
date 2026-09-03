@@ -7,7 +7,7 @@ use privacy::hashes::{
     compute_escrow_note_nullifier, compute_open_escrow_note_id, compute_open_escrow_note_nullifier,
 };
 use privacy::objects::{
-    EscrowNote, EscrowNoteInvokeResult, OpenEscrowNote, OpenEscrowNoteDeposit, OpenNoteDeposit,
+    EscrowInvokeResult, EscrowNote, OpenEscrowNote, OpenEscrowNoteDeposit, OpenNoteDeposit,
 };
 use privacy::tests::mock_note_controller::MockNoteController::{CALLBACK_MARKER, CONTROLLER_DENIED};
 use privacy::tests::mock_note_controller::{
@@ -17,7 +17,7 @@ use privacy::tests::utils_for_tests::{
     PrivacyCfgTrait, Test, TestTrait, User, UserTrait, deploy_mock_note_controller,
 };
 use privacy::utils::compute_escrow_note_actions_hash;
-use privacy::utils::constants::ESCROW_NOTE_INVOKE_SELECTOR;
+use privacy::utils::constants::ESCROW_INVOKE_SELECTOR;
 use privacy::{errors, events};
 use snforge_std::{
     DeclareResultTrait, EventSpyTrait, EventsFilterTrait, TokenTrait, declare, get_class_hash,
@@ -261,12 +261,12 @@ fn test_escrow_note_survives_contract_upgrade() {
     let no_open_note_deposits: Array<OpenNoteDeposit> = array![];
     let no_open_escrow_note_deposits: Array<OpenEscrowNoteDeposit> = array![];
     let no_associated_addresses: Array<ContractAddress> = array![];
-    let callback_result = EscrowNoteInvokeResult {
+    let callback_result = EscrowInvokeResult {
         open_note_deposits: no_open_note_deposits.span(),
         open_escrow_note_deposits: no_open_escrow_note_deposits.span(),
         associated_addresses: no_associated_addresses.span(),
     };
-    mock_call(contract_address, ESCROW_NOTE_INVOKE_SELECTOR, callback_result, 1);
+    mock_call(contract_address, ESCROW_INVOKE_SELECTOR, callback_result, 1);
     test.privacy.apply_actions(:actions);
 
     let nullifier = compute_escrow_note_nullifier(note_id: created.note_id, secret: SECRET);
@@ -555,6 +555,6 @@ fn test_open_escrow_note_cannot_be_funded_twice_or_by_another_contract() {
 }
 
 #[test]
-fn test_escrow_note_callback_uses_dedicated_selector() {
-    assert_ne!(ESCROW_NOTE_INVOKE_SELECTOR, selector!("privacy_invoke"));
+fn test_escrow_callback_uses_dedicated_selector() {
+    assert_ne!(ESCROW_INVOKE_SELECTOR, selector!("privacy_invoke"));
 }

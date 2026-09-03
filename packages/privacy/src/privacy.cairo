@@ -23,21 +23,21 @@ pub mod Privacy {
     };
     use privacy::interface::{IAdmin, IClient, IServer, IViews};
     use privacy::objects::{
-        EncChannelInfo, EncOutgoingChannelInfo, EncPrivateKey, EncSubchannelInfo, EscrowNote,
-        EscrowNoteContext, Note, OpenEscrowNote, OpenEscrowNoteDeposit, OpenNoteDeposit,
-        OpenNoteScreeningPolicy, TokenBalances, TokenBalancesTrait,
+        EncChannelInfo, EncOutgoingChannelInfo, EncPrivateKey, EncSubchannelInfo,
+        EscrowInvokeContext, EscrowNote, Note, OpenEscrowNote, OpenEscrowNoteDeposit,
+        OpenNoteDeposit, OpenNoteScreeningPolicy, TokenBalances, TokenBalancesTrait,
     };
     use privacy::snip12::{ScreeningAttestation, is_screening_attestation_valid};
     use privacy::utils::constants::{
         CONTRACT_VERSION, DEPOSITOR_VALIDATION_MAX_AGE, DEPOSITOR_VALIDATION_MAX_FUTURE,
-        ESCROW_NOTE_INVOKE_SELECTOR, ESCROW_NOTE_INVOKE_WITH_COMPUTATION_SELECTOR, INVOKE_SELECTOR,
+        ESCROW_INVOKE_SELECTOR, ESCROW_INVOKE_WITH_COMPUTATION_SELECTOR, INVOKE_SELECTOR,
         INVOKE_WITH_COMPUTATION_SELECTOR, OPEN_NOTE_SALT, PRIVACY_COMPUTE_SELECTOR,
         STRK_TOKEN_ADDRESS, VIRTUAL_SNOS, VIRTUAL_SNOS0,
     };
     use privacy::utils::{
         ProofFacts, assert_valid_os_call, assert_valid_signature, compute_escrow_note_actions_hash,
         compute_message_hash, decode_note_amount, derive_public_key,
-        deserialize_escrow_note_invoke_return_data, deserialize_invoke_return_data,
+        deserialize_escrow_invoke_return_data, deserialize_invoke_return_data,
         enc_note_packed_value, encrypt_channel_info, encrypt_outgoing_channel_info,
         encrypt_private_key, encrypt_subchannel_info, encrypt_user_addr,
         extract_compile_actions_inputs, extract_server_actions_from_panic, is_canonical_key,
@@ -1045,7 +1045,7 @@ pub mod Privacy {
             let execution_info = get_execution_info();
             let mut serialized_actions = array![];
             actions.serialize(ref serialized_actions);
-            let escrow_note_context = EscrowNoteContext {
+            let escrow_invoke_context = EscrowInvokeContext {
                 actions_hash: compute_escrow_note_actions_hash(
                     :actions,
                     chain_id: execution_info.tx_info.chain_id,
@@ -1056,7 +1056,7 @@ pub mod Privacy {
             let mut undeposited_open_notes: usize = Zero::zero();
             let mut undeposited_open_escrow_notes: usize = Zero::zero();
             let mut screening_subject: Option<ContractAddress> = None;
-            let mut escrow_note_callback_applied = false;
+            let mut escrow_callback_applied = false;
             for action in actions {
                 match *action {
                     ServerAction::WriteOnce(input) => self._apply_write_once(:input),
@@ -1068,13 +1068,13 @@ pub mod Privacy {
                     ServerAction::TransferTo(input) => self._apply_transfer_to(:input),
                     ServerAction::Invoke(input) => {
                         let (selector, context) = self
-                            ._escrow_note_invoke_parameters(
+                            ._escrow_invoke_parameters(
                                 :input,
                                 standard_selector: INVOKE_SELECTOR,
-                                escrow_note_selector: ESCROW_NOTE_INVOKE_SELECTOR,
+                                escrow_selector: ESCROW_INVOKE_SELECTOR,
                                 :contract_address,
-                                :escrow_note_context,
-                                ref :escrow_note_callback_applied,
+                                :escrow_invoke_context,
+                                ref :escrow_callback_applied,
                             );
                         self
                             ._apply_invoke_and_deposits(
@@ -1088,13 +1088,13 @@ pub mod Privacy {
                     },
                     ServerAction::InvokeWithComputation(input) => {
                         let (selector, context) = self
-                            ._escrow_note_invoke_parameters(
+                            ._escrow_invoke_parameters(
                                 :input,
                                 standard_selector: INVOKE_WITH_COMPUTATION_SELECTOR,
-                                escrow_note_selector: ESCROW_NOTE_INVOKE_WITH_COMPUTATION_SELECTOR,
+                                escrow_selector: ESCROW_INVOKE_WITH_COMPUTATION_SELECTOR,
                                 :contract_address,
-                                :escrow_note_context,
-                                ref :escrow_note_callback_applied,
+                                :escrow_invoke_context,
+                                ref :escrow_callback_applied,
                             );
                         self
                             ._apply_invoke_and_deposits(
@@ -1140,7 +1140,7 @@ pub mod Privacy {
                 errors::UNDEPOSITED_OPEN_ESCROW_NOTES,
             );
             assert(
-                contract_address.is_none() || escrow_note_callback_applied,
+                contract_address.is_none() || escrow_callback_applied,
                 errors::ESCROW_NOTE_CALLBACK_REQUIRED,
             );
             screening_subject
@@ -1194,21 +1194,21 @@ pub mod Privacy {
             }
         }
 
-        fn _escrow_note_invoke_parameters(
+        fn _escrow_invoke_parameters(
             self: @ContractState,
             input: InvokeInput,
             standard_selector: felt252,
-            escrow_note_selector: felt252,
+            escrow_selector: felt252,
             contract_address: Option<ContractAddress>,
-            escrow_note_context: EscrowNoteContext,
-            ref escrow_note_callback_applied: bool,
-        ) -> (felt252, Option<EscrowNoteContext>) {
+            escrow_invoke_context: EscrowInvokeContext,
+            ref escrow_callback_applied: bool,
+        ) -> (felt252, Option<EscrowInvokeContext>) {
             if let Some(required_address) = contract_address {
                 assert(
                     input.contract_address == required_address, errors::ESCROW_NOTE_TARGET_MISMATCH,
                 );
-                escrow_note_callback_applied = true;
-                (escrow_note_selector, Option::Some(escrow_note_context))
+                escrow_callback_applied = true;
+                (escrow_selector, Option::Some(escrow_invoke_context))
             } else {
                 (standard_selector, Option::None)
             }
@@ -1359,7 +1359,7 @@ pub mod Privacy {
             ref self: ContractState,
             input: InvokeInput,
             selector: felt252,
-            context: Option<EscrowNoteContext>,
+            context: Option<EscrowInvokeContext>,
             ref undeposited_open_notes: usize,
             ref undeposited_open_escrow_notes: usize,
             ref screening_subject: Option<ContractAddress>,
@@ -1367,8 +1367,8 @@ pub mod Privacy {
             let InvokeInput { contract_address, calldata } = input;
             let is_escrow_callback = context.is_some();
             let mut effective_calldata = array![];
-            if let Some(escrow_note_context) = context {
-                escrow_note_context.serialize(ref effective_calldata);
+            if let Some(escrow_invoke_context) = context {
+                escrow_invoke_context.serialize(ref effective_calldata);
             }
             effective_calldata.append_span(calldata);
             let return_data = call_contract_syscall(
@@ -1380,7 +1380,7 @@ pub mod Privacy {
             self.emit(events::ExternalContractInvoked { contract_address, selector });
 
             if is_escrow_callback {
-                let result = deserialize_escrow_note_invoke_return_data(return_data);
+                let result = deserialize_escrow_invoke_return_data(return_data);
                 self
                     ._apply_callback_deposits(
                         depositor: contract_address,
@@ -1431,7 +1431,7 @@ pub mod Privacy {
                     OpenNoteScreeningPolicy::Delegated => {
                         // Only a compute-invoke is delegated; a plain invoke is exempt.
                         if selector == INVOKE_WITH_COMPUTATION_SELECTOR
-                            || selector == ESCROW_NOTE_INVOKE_WITH_COMPUTATION_SELECTOR {
+                            || selector == ESCROW_INVOKE_WITH_COMPUTATION_SELECTOR {
                             let associated_addresses = associated_addresses
                                 .expect(errors::INVALID_ASSOCIATED_ADDRESSES);
                             assert(!associated_addresses.is_empty(), errors::NO_ASSOCIATED_ADDRESS);
