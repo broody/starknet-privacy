@@ -111,9 +111,9 @@ pub struct ContractNoteCreated {
     /// The note ID.
     #[key]
     pub note_id: felt252,
-    /// The controller contract address.
+    /// The address of the controller contract.
     #[key]
-    pub controller_contract: ContractAddress,
+    pub contract_address: ContractAddress,
     /// The application-specific controller commitment.
     #[key]
     pub controller_commitment: felt252,
@@ -130,9 +130,9 @@ pub struct ContractNoteUsed {
     /// Secret-derived nullifier of the used contract note. This does not reveal its note ID.
     #[key]
     pub nullifier: felt252,
-    /// The controller contract address that authorized the spend.
+    /// The address of the controller contract that authorized the spend.
     #[key]
-    pub controller_contract: ContractAddress,
+    pub contract_address: ContractAddress,
     /// Application-specific policy commitment bound at creation.
     #[key]
     pub controller_commitment: felt252,

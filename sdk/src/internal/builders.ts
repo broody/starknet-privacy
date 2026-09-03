@@ -143,7 +143,7 @@ export class TokenOperationsBuilderImpl implements TokenOperationsBuilder {
     for (const output of outputs) {
       this.createContractNotes.push({
         token: this.token,
-        controllerContract: output.controllerContract,
+        contractAddress: output.contractAddress,
         controllerCommitment: output.controllerCommitment,
         amount: output.amount,
         nonce: output.nonce,

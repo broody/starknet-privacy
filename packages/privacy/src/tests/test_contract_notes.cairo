@@ -72,7 +72,7 @@ fn create_contract_note(
                 ClientAction::UseNote(use_source),
                 ClientAction::CreateContractNote(
                     CreateContractNoteInput {
-                        controller_contract: controller,
+                        contract_address: controller,
                         controller_commitment: CONTROLLER_COMMITMENT,
                         token,
                         amount: AMOUNT,
@@ -134,7 +134,7 @@ fn test_contract_note_lifecycle_binds_exact_actions_and_authorizes_atomically() 
         test.privacy.get_contract_note(note_id: created.note_id),
         ContractNote {
             note_commitment: created.note_commitment,
-            controller_contract: controller,
+            contract_address: controller,
             controller_class_hash: created.controller_class_hash,
             controller_commitment: CONTROLLER_COMMITMENT,
             token,
@@ -165,7 +165,7 @@ fn test_contract_note_lifecycle_binds_exact_actions_and_authorizes_atomically() 
     let emitted_events = spy.get_events().emitted_by(contract_address: test.privacy.address).events;
     let expected_event = events::ContractNoteUsed {
         nullifier,
-        controller_contract: controller,
+        contract_address: controller,
         controller_commitment: CONTROLLER_COMMITMENT,
         controller_class_hash: created.controller_class_hash,
         token,

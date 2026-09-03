@@ -40,7 +40,7 @@ const USER_ADDR: felt252 = 0x999;
 const USER_PRIVATE_KEY: felt252 = 0x888;
 const CONTRACT_NOTE_CHAIN_ID: felt252 = 0x1111;
 const CONTRACT_NOTE_POOL: felt252 = 0x2222;
-const CONTROLLER_CONTRACT: felt252 = 0x3333;
+const CONTRACT_ADDRESS: felt252 = 0x3333;
 const CONTROLLER_CLASS_HASH: felt252 = 0x4444;
 const CONTROLLER_COMMITMENT: felt252 = 0x5555;
 const CONTRACT_NOTE_NONCE: felt252 = 0x6666;
@@ -78,7 +78,7 @@ fn generate_reference_hashes() {
         chain_id: CONTRACT_NOTE_CHAIN_ID,
         pool_address: to_address(CONTRACT_NOTE_POOL),
         sender_addr: sender,
-        controller_contract: to_address(CONTROLLER_CONTRACT),
+        contract_address: to_address(CONTRACT_ADDRESS),
         controller_class_hash: to_class_hash(CONTROLLER_CLASS_HASH),
         controller_commitment: CONTROLLER_COMMITMENT,
         token: token,
@@ -88,7 +88,7 @@ fn generate_reference_hashes() {
         chain_id: CONTRACT_NOTE_CHAIN_ID,
         pool_address: to_address(CONTRACT_NOTE_POOL),
         note_id: contract_note_id,
-        controller_contract: to_address(CONTROLLER_CONTRACT),
+        contract_address: to_address(CONTRACT_ADDRESS),
         controller_class_hash: to_class_hash(CONTROLLER_CLASS_HASH),
         controller_commitment: CONTROLLER_COMMITMENT,
         token: token,
@@ -172,7 +172,7 @@ fn generate_reference_hashes() {
     println!("inputs.userPrivateKey: 0x{:x}", USER_PRIVATE_KEY);
     println!("inputs.contractNoteChainId: 0x{:x}", CONTRACT_NOTE_CHAIN_ID);
     println!("inputs.contractNotePool: 0x{:x}", CONTRACT_NOTE_POOL);
-    println!("inputs.controllerContract: 0x{:x}", CONTROLLER_CONTRACT);
+    println!("inputs.contractAddress: 0x{:x}", CONTRACT_ADDRESS);
     println!("inputs.controllerClassHash: 0x{:x}", CONTROLLER_CLASS_HASH);
     println!("inputs.controllerCommitment: 0x{:x}", CONTROLLER_COMMITMENT);
     println!("inputs.contractNoteNonce: 0x{:x}", CONTRACT_NOTE_NONCE);

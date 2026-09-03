@@ -454,11 +454,11 @@ export class ActionCompiler {
 
     if (actions.createContractNotes) {
       for (const action of actions.createContractNotes) {
-        const controllerContract = toBigInt(action.controllerContract);
+        const contractAddress = toBigInt(action.contractAddress);
         const controllerCommitment = toBigInt(action.controllerCommitment);
         const nonce = toBigInt(action.nonce);
         const blinding = toBigInt(action.blinding);
-        assert(controllerContract !== 0n, () => "Controller contract must be non-zero");
+        assert(contractAddress !== 0n, () => "Contract address must be non-zero");
         assert(controllerCommitment !== 0n, () => "Controller commitment must be non-zero");
         assert(action.token !== 0n, () => "Contract note token must be non-zero");
         assert(action.amount > 0n, () => "Contract note amount must be positive");
@@ -467,7 +467,7 @@ export class ActionCompiler {
         const input = {
           type: "CreateContractNote",
           input: {
-            controller_contract: controllerContract,
+            contract_address: contractAddress,
             controller_commitment: controllerCommitment,
             token: action.token,
             amount: action.amount,
@@ -498,7 +498,7 @@ export class ActionCompiler {
     // surpluses were handled in resolveNotes
 
     const controllerTargets = new Set(
-      (actions.createContractNotes ?? []).map((note) => toBigInt(note.controllerContract))
+      (actions.createContractNotes ?? []).map((note) => toBigInt(note.contractAddress))
     );
     assert(controllerTargets.size <= 1, () => "A transaction may target only one note controller");
     const hasContractNoteActions =

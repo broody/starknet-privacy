@@ -20,7 +20,7 @@ describe("contract note builder", () => {
       .with(env.ace)
       .deposit({ amount: 37n })
       .createContractNote({
-        controllerContract: CONTROLLER,
+        contractAddress: CONTROLLER,
         controllerCommitment: 91n,
         amount: 37n,
         nonce: 123n,
@@ -35,7 +35,7 @@ describe("contract note builder", () => {
       {
         type: "CreateContractNote",
         input: {
-          controller_contract: 0xabcn,
+          contract_address: 0xabcn,
           controller_commitment: 91n,
           token: toBigInt(env.ace),
           amount: 37n,
@@ -76,7 +76,7 @@ describe("contract note builder", () => {
       .with(env.ace)
       .deposit({ amount: 37n })
       .createContractNote({
-        controllerContract: CONTROLLER,
+        contractAddress: CONTROLLER,
         controllerCommitment: 91n,
         amount: 37n,
         nonce: 123n,
@@ -92,7 +92,7 @@ describe("contract note builder", () => {
       .with(env.ace)
       .deposit({ amount: 37n })
       .createContractNote({
-        controllerContract: CONTROLLER,
+        contractAddress: CONTROLLER,
         controllerCommitment: 91n,
         amount: 37n,
         nonce: 123n,

@@ -248,7 +248,7 @@ pub(crate) fn compute_contract_note_id(
     chain_id: felt252,
     pool_address: ContractAddress,
     sender_addr: ContractAddress,
-    controller_contract: ContractAddress,
+    contract_address: ContractAddress,
     controller_class_hash: ClassHash,
     controller_commitment: felt252,
     token: ContractAddress,
@@ -257,7 +257,7 @@ pub(crate) fn compute_contract_note_id(
     hash(
         [
             CONTRACT_NOTE_ID_TAG, chain_id, pool_address.into(), sender_addr.into(),
-            controller_contract.into(), controller_class_hash.into(), controller_commitment,
+            contract_address.into(), controller_class_hash.into(), controller_commitment,
             token.into(), nonce,
         ]
             .span(),
@@ -269,7 +269,7 @@ pub(crate) fn compute_contract_note_commitment(
     chain_id: felt252,
     pool_address: ContractAddress,
     note_id: felt252,
-    controller_contract: ContractAddress,
+    contract_address: ContractAddress,
     controller_class_hash: ClassHash,
     controller_commitment: felt252,
     token: ContractAddress,
@@ -279,7 +279,7 @@ pub(crate) fn compute_contract_note_commitment(
     hash(
         [
             CONTRACT_NOTE_COMMIT_TAG, chain_id, pool_address.into(), note_id,
-            controller_contract.into(), controller_class_hash.into(), controller_commitment,
+            contract_address.into(), controller_class_hash.into(), controller_commitment,
             token.into(), amount.into(), blinding,
         ]
             .span(),

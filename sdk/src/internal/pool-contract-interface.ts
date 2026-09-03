@@ -37,7 +37,7 @@ export type EncPrivateKey = {
 
 export type ContractNote = {
   note_commitment: BigNumberish;
-  controller_contract: BigNumberish;
+  contract_address: BigNumberish;
   controller_class_hash: BigNumberish;
   controller_commitment: BigNumberish;
   token: BigNumberish;

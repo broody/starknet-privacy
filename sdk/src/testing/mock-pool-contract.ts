@@ -126,7 +126,7 @@ export class MockPoolContract implements MockContract, PoolContractInterface {
   get_contract_note(_noteId: bigint): ContractNote {
     return {
       note_commitment: 0n,
-      controller_contract: 0n,
+      contract_address: 0n,
       controller_class_hash: 0n,
       controller_commitment: 0n,
       token: 0n,

@@ -102,13 +102,13 @@ export function compute_nullifier(channel_key: bigint, token: bigint, index: num
 }
 
 /** See packages/privacy/src/hashes.cairo for documentation. */
-export function compute_contract_note_id(chain_id: bigint, pool_address: bigint, sender_addr: bigint, controller_contract: bigint, controller_class_hash: bigint, controller_commitment: bigint, token: bigint, nonce: bigint): bigint {
-  return hash(CONTRACT_NOTE_ID_TAG, chain_id, pool_address, sender_addr, controller_contract, controller_class_hash, controller_commitment, token, nonce);
+export function compute_contract_note_id(chain_id: bigint, pool_address: bigint, sender_addr: bigint, contract_address: bigint, controller_class_hash: bigint, controller_commitment: bigint, token: bigint, nonce: bigint): bigint {
+  return hash(CONTRACT_NOTE_ID_TAG, chain_id, pool_address, sender_addr, contract_address, controller_class_hash, controller_commitment, token, nonce);
 }
 
 /** See packages/privacy/src/hashes.cairo for documentation. */
-export function compute_contract_note_commitment(chain_id: bigint, pool_address: bigint, note_id: bigint, controller_contract: bigint, controller_class_hash: bigint, controller_commitment: bigint, token: bigint, amount: bigint, blinding: bigint): bigint {
-  return hash(CONTRACT_NOTE_COMMIT_TAG, chain_id, pool_address, note_id, controller_contract, controller_class_hash, controller_commitment, token, amount, blinding);
+export function compute_contract_note_commitment(chain_id: bigint, pool_address: bigint, note_id: bigint, contract_address: bigint, controller_class_hash: bigint, controller_commitment: bigint, token: bigint, amount: bigint, blinding: bigint): bigint {
+  return hash(CONTRACT_NOTE_COMMIT_TAG, chain_id, pool_address, note_id, contract_address, controller_class_hash, controller_commitment, token, amount, blinding);
 }
 
 /** See packages/privacy/src/hashes.cairo for documentation. */

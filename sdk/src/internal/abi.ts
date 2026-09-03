@@ -252,7 +252,7 @@ export const PrivacyPoolABI = [
     "name": "privacy::actions::CreateContractNoteInput",
     "members": [
       {
-        "name": "controller_contract",
+        "name": "contract_address",
         "type": "core::starknet::contract_address::ContractAddress"
       },
       {
@@ -600,7 +600,7 @@ export const PrivacyPoolABI = [
         "type": "core::felt252"
       },
       {
-        "name": "controller_contract",
+        "name": "contract_address",
         "type": "core::starknet::contract_address::ContractAddress"
       },
       {
@@ -630,7 +630,7 @@ export const PrivacyPoolABI = [
         "type": "core::felt252"
       },
       {
-        "name": "controller_contract",
+        "name": "contract_address",
         "type": "core::starknet::contract_address::ContractAddress"
       },
       {
@@ -922,7 +922,7 @@ export const PrivacyPoolABI = [
         "type": "core::felt252"
       },
       {
-        "name": "controller_contract",
+        "name": "contract_address",
         "type": "core::starknet::contract_address::ContractAddress"
       },
       {
@@ -2142,7 +2142,7 @@ export const PrivacyPoolABI = [
         "kind": "key"
       },
       {
-        "name": "controller_contract",
+        "name": "contract_address",
         "type": "core::starknet::contract_address::ContractAddress",
         "kind": "key"
       },
@@ -2179,7 +2179,7 @@ export const PrivacyPoolABI = [
         "kind": "key"
       },
       {
-        "name": "controller_contract",
+        "name": "contract_address",
         "type": "core::starknet::contract_address::ContractAddress",
         "kind": "key"
       },

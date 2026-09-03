@@ -739,21 +739,21 @@ pub mod Privacy {
         ) -> Array<ServerAction> {
             input.assert_valid();
             let CreateContractNoteInput {
-                controller_contract, controller_commitment, token, amount, nonce, blinding,
+                contract_address, controller_commitment, token, amount, nonce, blinding,
             } = input;
             // Keep the authenticated sender in the private note-id preimage. Unlike the old
             // construction, the random nonce prevents public address enumeration.
             let execution_info = get_execution_info();
             let chain_id = execution_info.tx_info.chain_id;
             let pool_address = get_contract_address();
-            let controller_class_hash = get_class_hash_at_syscall(controller_contract)
+            let controller_class_hash = get_class_hash_at_syscall(contract_address)
                 .unwrap_syscall();
             assert(controller_class_hash.is_non_zero(), errors::CONTROLLER_CLASS_MISMATCH);
             let note_id = compute_contract_note_id(
                 :chain_id,
                 :pool_address,
                 :sender_addr,
-                :controller_contract,
+                :contract_address,
                 :controller_class_hash,
                 :controller_commitment,
                 :token,
@@ -763,7 +763,7 @@ pub mod Privacy {
                 :chain_id,
                 :pool_address,
                 :note_id,
-                :controller_contract,
+                :contract_address,
                 :controller_class_hash,
                 :controller_commitment,
                 :token,
@@ -778,7 +778,7 @@ pub mod Privacy {
                 ServerAction::CreateContractNote(
                     events::ContractNoteCreated {
                         note_id,
-                        controller_contract,
+                        contract_address,
                         controller_commitment,
                         controller_class_hash,
                         token,
@@ -803,7 +803,7 @@ pub mod Privacy {
                 :chain_id,
                 :pool_address,
                 :note_id,
-                controller_contract: note.controller_contract,
+                contract_address: note.contract_address,
                 controller_class_hash: note.controller_class_hash,
                 controller_commitment: note.controller_commitment,
                 token: note.token,
@@ -823,7 +823,7 @@ pub mod Privacy {
                 ServerAction::UseContractNote(
                     events::ContractNoteUsed {
                         nullifier,
-                        controller_contract: note.controller_contract,
+                        contract_address: note.contract_address,
                         controller_commitment: note.controller_commitment,
                         controller_class_hash: note.controller_class_hash,
                         token: note.token,
@@ -992,7 +992,7 @@ pub mod Privacy {
         fn _apply_actions(
             ref self: ContractState, actions: Span<ServerAction>,
         ) -> Option<ContractAddress> {
-            let (controller_contract, controller_class_hash, created_notes, spent_notes) = self
+            let (contract_address, controller_class_hash, created_notes, spent_notes) = self
                 ._collect_contract_note_actions(:actions);
             let execution_info = get_execution_info();
             let mut serialized_actions = array![];
@@ -1027,7 +1027,7 @@ pub mod Privacy {
                                 :input,
                                 standard_selector: INVOKE_SELECTOR,
                                 contract_note_selector: CONTRACT_NOTE_INVOKE_SELECTOR,
-                                :controller_contract,
+                                :contract_address,
                                 :controller_class_hash,
                                 :contract_note_context,
                                 ref :contract_note_callback_applied,
@@ -1047,7 +1047,7 @@ pub mod Privacy {
                                 :input,
                                 standard_selector: INVOKE_WITH_COMPUTATION_SELECTOR,
                                 contract_note_selector: CONTRACT_NOTE_INVOKE_WITH_COMPUTATION_SELECTOR,
-                                :controller_contract,
+                                :contract_address,
                                 :controller_class_hash,
                                 :contract_note_context,
                                 ref :contract_note_callback_applied,
@@ -1082,7 +1082,7 @@ pub mod Privacy {
             }
             assert(undeposited_open_notes == Zero::zero(), errors::UNDEPOSITED_OPEN_NOTES);
             assert(
-                controller_contract.is_none() || contract_note_callback_applied,
+                contract_address.is_none() || contract_note_callback_applied,
                 errors::CONTRACT_NOTE_CALLBACK_REQUIRED,
             );
             screening_subject
@@ -1096,7 +1096,7 @@ pub mod Privacy {
             Array<ContractNoteCreatedRef>,
             Array<ContractNoteSpentRef>,
         ) {
-            let mut controller_contract: Option<ContractAddress> = None;
+            let mut contract_address: Option<ContractAddress> = None;
             let mut controller_class_hash: Option<ClassHash> = None;
             let mut created_notes = array![];
             let mut spent_notes = array![];
@@ -1105,9 +1105,9 @@ pub mod Privacy {
                     ServerAction::CreateContractNote(event) => {
                         self
                             ._unify_note_controller(
-                                ref :controller_contract,
+                                ref :contract_address,
                                 ref :controller_class_hash,
-                                reference_address: event.controller_contract,
+                                reference_address: event.contract_address,
                                 reference_class_hash: event.controller_class_hash,
                             );
                         created_notes
@@ -1123,9 +1123,9 @@ pub mod Privacy {
                     ServerAction::UseContractNote(event) => {
                         self
                             ._unify_note_controller(
-                                ref :controller_contract,
+                                ref :contract_address,
                                 ref :controller_class_hash,
-                                reference_address: event.controller_contract,
+                                reference_address: event.contract_address,
                                 reference_class_hash: event.controller_class_hash,
                             );
                         spent_notes
@@ -1140,24 +1140,24 @@ pub mod Privacy {
                     _ => {},
                 }
             }
-            (controller_contract, controller_class_hash, created_notes, spent_notes)
+            (contract_address, controller_class_hash, created_notes, spent_notes)
         }
 
         fn _unify_note_controller(
             self: @ContractState,
-            ref controller_contract: Option<ContractAddress>,
+            ref contract_address: Option<ContractAddress>,
             ref controller_class_hash: Option<ClassHash>,
             reference_address: ContractAddress,
             reference_class_hash: ClassHash,
         ) {
-            if let Some(existing_address) = controller_contract {
+            if let Some(existing_address) = contract_address {
                 assert(existing_address == reference_address, errors::MULTIPLE_NOTE_CONTROLLERS);
                 assert(
                     controller_class_hash.unwrap() == reference_class_hash,
                     errors::CONTROLLER_CLASS_MISMATCH,
                 );
             } else {
-                controller_contract = Option::Some(reference_address);
+                contract_address = Option::Some(reference_address);
                 controller_class_hash = Option::Some(reference_class_hash);
             }
         }
@@ -1167,12 +1167,12 @@ pub mod Privacy {
             input: InvokeInput,
             standard_selector: felt252,
             contract_note_selector: felt252,
-            controller_contract: Option<ContractAddress>,
+            contract_address: Option<ContractAddress>,
             controller_class_hash: Option<ClassHash>,
             contract_note_context: ContractNoteContext,
             ref contract_note_callback_applied: bool,
         ) -> (felt252, Option<ContractNoteContext>) {
-            if let Some(required_address) = controller_contract {
+            if let Some(required_address) = contract_address {
                 assert(
                     input.contract_address == required_address,
                     errors::CONTRACT_NOTE_TARGET_MISMATCH,
@@ -1246,7 +1246,7 @@ pub mod Privacy {
         ) {
             let events::ContractNoteCreated {
                 note_id,
-                controller_contract,
+                contract_address,
                 controller_commitment,
                 controller_class_hash,
                 token,
@@ -1261,7 +1261,7 @@ pub mod Privacy {
                 .write(
                     ContractNote {
                         note_commitment,
-                        controller_contract,
+                        contract_address,
                         controller_class_hash,
                         controller_commitment,
                         token,
@@ -1271,10 +1271,10 @@ pub mod Privacy {
 
         fn _apply_contract_note_used(ref self: ContractState, event: events::ContractNoteUsed) {
             let events::ContractNoteUsed {
-                nullifier, controller_contract, controller_commitment, controller_class_hash, token,
+                nullifier, contract_address, controller_commitment, controller_class_hash, token,
             } = event;
             assert(nullifier.is_non_zero(), errors::ZERO_NOTE_ID);
-            assert(controller_contract.is_non_zero(), errors::ZERO_CONTROLLER_CONTRACT);
+            assert(contract_address.is_non_zero(), errors::ZERO_CONTRACT_ADDRESS);
             assert(controller_commitment.is_non_zero(), errors::ZERO_CONTROLLER_COMMITMENT);
             assert(controller_class_hash.is_non_zero(), errors::CONTROLLER_CLASS_MISMATCH);
             assert(token.is_non_zero(), errors::ZERO_TOKEN);

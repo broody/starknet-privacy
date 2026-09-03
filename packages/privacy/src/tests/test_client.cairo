@@ -95,7 +95,7 @@ fn test_action_enum_discriminants_are_append_only() {
         client_action_variant(
             ClientAction::CreateContractNote(
                 CreateContractNoteInput {
-                    controller_contract: 1.try_into().unwrap(),
+                    contract_address: 1.try_into().unwrap(),
                     controller_commitment: 1,
                     token: 1.try_into().unwrap(),
                     amount: 1,

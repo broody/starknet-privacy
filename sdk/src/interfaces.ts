@@ -198,7 +198,7 @@ export type UseNoteAction = {
 
 /** Private opening used to create a note controlled by a controller contract. */
 export type ContractNoteCreation = {
-  controllerContract: StarknetAddress;
+  contractAddress: StarknetAddress;
   controllerCommitment: BigNumberish;
   amount: Amount;
   /** Secret, non-zero random felt retained by the creator until the note is spent. */

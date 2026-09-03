@@ -260,7 +260,7 @@ fn test_compute_contract_note_id_different_inputs() {
     let chain_id = 'CHAIN_ID';
     let pool_address = hash(['POOL_ADDRESS'].span()).try_into().unwrap();
     let sender_addr = hash(['SENDER_ADDR'].span()).try_into().unwrap();
-    let controller_contract = hash(['CONTROLLER_CONTRACT'].span()).try_into().unwrap();
+    let contract_address = hash(['CONTRACT_ADDRESS'].span()).try_into().unwrap();
     let controller_class_hash = hash(['CONTROLLER_CLASS'].span()).try_into().unwrap();
     let controller_commitment = hash(['CONTROLLER_COMMITMENT'].span());
     let token = hash(['TOKEN'].span()).try_into().unwrap();
@@ -269,7 +269,7 @@ fn test_compute_contract_note_id_different_inputs() {
         :chain_id,
         :pool_address,
         :sender_addr,
-        :controller_contract,
+        :contract_address,
         :controller_class_hash,
         :controller_commitment,
         :token,
@@ -283,7 +283,7 @@ fn test_compute_contract_note_id_different_inputs() {
             :chain_id,
             :pool_address,
             sender_addr: other_sender_addr,
-            :controller_contract,
+            :contract_address,
             :controller_class_hash,
             :controller_commitment,
             :token,
@@ -296,7 +296,7 @@ fn test_compute_contract_note_id_different_inputs() {
             :chain_id,
             :pool_address,
             :sender_addr,
-            :controller_contract,
+            :contract_address,
             :controller_class_hash,
             :controller_commitment,
             :token,
@@ -309,7 +309,7 @@ fn test_compute_contract_note_id_different_inputs() {
             chain_id: 'OTHER_CHAIN',
             :pool_address,
             :sender_addr,
-            :controller_contract,
+            :contract_address,
             :controller_class_hash,
             :controller_commitment,
             :token,
@@ -323,7 +323,7 @@ fn test_compute_contract_note_commitment_hides_amount_and_blinding() {
     let chain_id = 'CHAIN_ID';
     let pool_address = hash(['POOL_ADDRESS'].span()).try_into().unwrap();
     let note_id = hash(['NOTE_ID'].span());
-    let controller_contract = hash(['CONTROLLER_CONTRACT'].span()).try_into().unwrap();
+    let contract_address = hash(['CONTRACT_ADDRESS'].span()).try_into().unwrap();
     let controller_class_hash = hash(['CONTROLLER_CLASS'].span()).try_into().unwrap();
     let controller_commitment = hash(['CONTROLLER_COMMITMENT'].span());
     let token = hash(['TOKEN'].span()).try_into().unwrap();
@@ -333,7 +333,7 @@ fn test_compute_contract_note_commitment_hides_amount_and_blinding() {
         :chain_id,
         :pool_address,
         :note_id,
-        :controller_contract,
+        :contract_address,
         :controller_class_hash,
         :controller_commitment,
         :token,
@@ -346,7 +346,7 @@ fn test_compute_contract_note_commitment_hides_amount_and_blinding() {
             :chain_id,
             :pool_address,
             :note_id,
-            :controller_contract,
+            :contract_address,
             :controller_class_hash,
             :controller_commitment,
             :token,
@@ -360,7 +360,7 @@ fn test_compute_contract_note_commitment_hides_amount_and_blinding() {
             :chain_id,
             :pool_address,
             :note_id,
-            :controller_contract,
+            :contract_address,
             :controller_class_hash,
             :controller_commitment,
             :token,

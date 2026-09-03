@@ -83,7 +83,7 @@ await transfers
   .with(STRK)
   .inputs(fundingNote)
   .createContractNote({
-    controllerContract: auction,
+    contractAddress: auction,
     controllerCommitment: settlementCommitment,
     amount: bidAmount,
     nonce: privateRandomNonce,

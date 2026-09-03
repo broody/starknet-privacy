@@ -147,8 +147,8 @@ pub(crate) impl CreateOpenNoteInputValid of InputValidation<CreateOpenNoteInput>
 /// Input for the `CreateContractNote` action.
 #[derive(Serde, Copy, Drop, PartialEq, Debug)]
 pub struct CreateContractNoteInput {
-    /// The contract address controlling spend authority.
-    pub controller_contract: ContractAddress,
+    /// The address of the contract controlling spend authority.
+    pub contract_address: ContractAddress,
     /// The application-specific controller commitment.
     pub controller_commitment: felt252,
     /// The token's address.
@@ -164,9 +164,9 @@ pub struct CreateContractNoteInput {
 pub(crate) impl CreateContractNoteInputValid of InputValidation<CreateContractNoteInput> {
     fn assert_valid(self: CreateContractNoteInput) {
         let CreateContractNoteInput {
-            controller_contract, controller_commitment, token, amount, nonce, blinding,
+            contract_address, controller_commitment, token, amount, nonce, blinding,
         } = self;
-        assert(controller_contract.is_non_zero(), errors::ZERO_CONTROLLER_CONTRACT);
+        assert(contract_address.is_non_zero(), errors::ZERO_CONTRACT_ADDRESS);
         assert(controller_commitment.is_non_zero(), errors::ZERO_CONTROLLER_COMMITMENT);
         assert(token.is_non_zero(), errors::ZERO_TOKEN);
         assert(amount.is_non_zero(), errors::ZERO_AMOUNT);

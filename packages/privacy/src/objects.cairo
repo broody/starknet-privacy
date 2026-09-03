@@ -141,7 +141,7 @@ pub struct ContractNote {
     /// Hiding commitment to the note amount and its private blinding.
     pub note_commitment: felt252,
     /// Contract that must authorize creation and every spend.
-    pub controller_contract: ContractAddress,
+    pub contract_address: ContractAddress,
     /// Class hash bound when the note is created. A direct class replacement freezes the note.
     /// This cannot detect implementation changes behind a proxy; the controller commitment and
     /// callback must enforce any application-level version binding.
