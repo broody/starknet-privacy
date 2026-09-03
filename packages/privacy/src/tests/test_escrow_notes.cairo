@@ -56,7 +56,7 @@ fn source_note(
 
 fn escrow_note_event(actions: Span<ServerAction>) -> events::EscrowNoteCreated {
     for action in actions {
-        if let ServerAction::CreateEscrowNote(event) = *action {
+        if let ServerAction::EmitEscrowNoteCreated(event) = *action {
             return event;
         }
     }
@@ -65,7 +65,7 @@ fn escrow_note_event(actions: Span<ServerAction>) -> events::EscrowNoteCreated {
 
 fn open_escrow_note_event(actions: Span<ServerAction>) -> events::OpenEscrowNoteCreated {
     for action in actions {
-        if let ServerAction::CreateOpenEscrowNote(event) = *action {
+        if let ServerAction::EmitOpenEscrowNoteCreated(event) = *action {
             return event;
         }
     }
@@ -214,7 +214,7 @@ fn test_escrow_note_lifecycle_binds_exact_actions_and_authorizes_atomically() {
     test.privacy.apply_actions(:actions);
 
     let nullifier = compute_escrow_note_nullifier(note_id: created.note_id, secret: SECRET);
-    assert!(test.privacy.escrow_note_nullifier_exists(:nullifier));
+    assert!(test.privacy.nullifier_exists(:nullifier));
     assert_eq!(controller_dispatcher.callback_count(), 2);
     assert_eq!(controller_dispatcher.last_actions_hash(), expected_actions_hash);
     assert_eq!(controller_dispatcher.last_created_note_id(), 0);
@@ -270,7 +270,7 @@ fn test_escrow_note_survives_contract_upgrade() {
     test.privacy.apply_actions(:actions);
 
     let nullifier = compute_escrow_note_nullifier(note_id: created.note_id, secret: SECRET);
-    assert!(test.privacy.escrow_note_nullifier_exists(:nullifier));
+    assert!(test.privacy.nullifier_exists(:nullifier));
 }
 
 #[test]
@@ -296,7 +296,7 @@ fn test_escrow_note_spend_requires_callback_and_rolls_back() {
     let result = test.privacy.safe_apply_actions(:actions);
     assert_panic_with_felt_error(:result, expected_error: errors::ESCROW_NOTE_CALLBACK_REQUIRED);
     let nullifier = compute_escrow_note_nullifier(note_id: created.note_id, secret: SECRET);
-    assert!(!test.privacy.escrow_note_nullifier_exists(:nullifier));
+    assert!(!test.privacy.nullifier_exists(:nullifier));
 }
 
 #[test]
@@ -326,7 +326,7 @@ fn test_escrow_note_spend_rejects_wrong_target_and_denial() {
     let denied = test.privacy.safe_apply_actions(actions: denied_actions);
     assert_panic_with_felt_error(result: denied, expected_error: CONTROLLER_DENIED);
     let nullifier = compute_escrow_note_nullifier(note_id: created.note_id, secret: SECRET);
-    assert!(!test.privacy.escrow_note_nullifier_exists(:nullifier));
+    assert!(!test.privacy.nullifier_exists(:nullifier));
 }
 
 #[test]
@@ -440,7 +440,7 @@ fn test_open_escrow_note_is_callback_funded_and_spent_atomically() {
     let nullifier = compute_open_escrow_note_nullifier(
         note_id: created.note_id, secret: OPEN_ESCROW_SECRET,
     );
-    assert!(test.privacy.escrow_note_nullifier_exists(:nullifier));
+    assert!(test.privacy.nullifier_exists(:nullifier));
     assert_eq!(controller_dispatcher.last_spent_nullifier(), nullifier);
 }
 

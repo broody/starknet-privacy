@@ -501,12 +501,12 @@ pub enum ServerAction {
     /// *NOTE:* The target selector should assert the caller is the privacy contract,
     /// otherwise anyone could invoke it directly and bypass the privacy pool.
     InvokeWithComputation: InvokeInput,
-    /// Store and emit an escrow-note creation. Appended to preserve all existing discriminants.
-    CreateEscrowNote: events::EscrowNoteCreated,
-    /// Nullify and emit an escrow-note spend. Appended to preserve existing discriminants.
-    UseEscrowNote: events::EscrowNoteUsed,
-    /// Store a pending open escrow note. Appended to preserve existing discriminants.
-    CreateOpenEscrowNote: events::OpenEscrowNoteCreated,
-    /// Nullify and emit an open escrow note spend. Appended to preserve existing discriminants.
-    UseOpenEscrowNote: events::OpenEscrowNoteUsed,
+    /// Emit an escrow-note creation. Appended to preserve all existing discriminants.
+    EmitEscrowNoteCreated: events::EscrowNoteCreated,
+    /// Emit an escrow-note spend. Appended to preserve existing discriminants.
+    EmitEscrowNoteUsed: events::EscrowNoteUsed,
+    /// Emit a pending open escrow-note creation. Appended to preserve existing discriminants.
+    EmitOpenEscrowNoteCreated: events::OpenEscrowNoteCreated,
+    /// Emit an open escrow-note spend. Appended to preserve existing discriminants.
+    EmitOpenEscrowNoteUsed: events::OpenEscrowNoteUsed,
 }

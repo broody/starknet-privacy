@@ -788,19 +788,19 @@ export const PrivacyPoolABI = [
         "type": "privacy::actions::InvokeInput"
       },
       {
-        "name": "CreateEscrowNote",
+        "name": "EmitEscrowNoteCreated",
         "type": "privacy::events::EscrowNoteCreated"
       },
       {
-        "name": "UseEscrowNote",
+        "name": "EmitEscrowNoteUsed",
         "type": "privacy::events::EscrowNoteUsed"
       },
       {
-        "name": "CreateOpenEscrowNote",
+        "name": "EmitOpenEscrowNoteCreated",
         "type": "privacy::events::OpenEscrowNoteCreated"
       },
       {
-        "name": "UseOpenEscrowNote",
+        "name": "EmitOpenEscrowNoteUsed",
         "type": "privacy::events::OpenEscrowNoteUsed"
       }
     ]
@@ -1230,22 +1230,6 @@ export const PrivacyPoolABI = [
       {
         "type": "function",
         "name": "nullifier_exists",
-        "inputs": [
-          {
-            "name": "nullifier",
-            "type": "core::felt252"
-          }
-        ],
-        "outputs": [
-          {
-            "type": "core::bool"
-          }
-        ],
-        "state_mutability": "view"
-      },
-      {
-        "type": "function",
-        "name": "escrow_note_nullifier_exists",
         "inputs": [
           {
             "name": "nullifier",

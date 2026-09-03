@@ -317,6 +317,18 @@ pub trait IClient<T> {
     /// - [`EmitNoteUsed`](privacy::actions::ServerAction::EmitNoteUsed): Emits a
     /// [`NoteUsed`](privacy::events::NoteUsed) event.
     ///
+    /// **For [`UseEscrowNote`](privacy::actions::ClientAction::UseEscrowNote) action:**
+    /// - [`WriteOnce`](privacy::actions::ServerAction::WriteOnce): Writes the nullifier to the
+    /// shared nullifier map.
+    /// - [`EmitEscrowNoteUsed`](privacy::actions::ServerAction::EmitEscrowNoteUsed): Emits an
+    /// [`EscrowNoteUsed`](privacy::events::EscrowNoteUsed) event.
+    ///
+    /// **For [`UseOpenEscrowNote`](privacy::actions::ClientAction::UseOpenEscrowNote) action:**
+    /// - [`WriteOnce`](privacy::actions::ServerAction::WriteOnce): Writes the nullifier to the
+    /// shared nullifier map.
+    /// - [`EmitOpenEscrowNoteUsed`](privacy::actions::ServerAction::EmitOpenEscrowNoteUsed): Emits
+    /// an [`OpenEscrowNoteUsed`](privacy::events::OpenEscrowNoteUsed) event.
+    ///
     /// **For [`CreateEncNote`](privacy::actions::ClientAction::CreateEncNote) action:**
     /// - [`WriteOnce`](privacy::actions::ServerAction::WriteOnce): Writes the encrypted note to
     /// storage.
@@ -328,6 +340,19 @@ pub trait IClient<T> {
     /// storage.
     /// - [`EmitOpenNoteCreated`](privacy::actions::ServerAction::EmitOpenNoteCreated): Emits an
     /// [`OpenNoteCreated`](privacy::events::OpenNoteCreated) event.
+    ///
+    /// **For [`CreateEscrowNote`](privacy::actions::ClientAction::CreateEscrowNote) action:**
+    /// - [`WriteOnce`](privacy::actions::ServerAction::WriteOnce): Writes the escrow note to
+    /// storage.
+    /// - [`EmitEscrowNoteCreated`](privacy::actions::ServerAction::EmitEscrowNoteCreated): Emits an
+    /// [`EscrowNoteCreated`](privacy::events::EscrowNoteCreated) event.
+    ///
+    /// **For [`CreateOpenEscrowNote`](privacy::actions::ClientAction::CreateOpenEscrowNote)
+    /// action:**
+    /// - [`WriteOnce`](privacy::actions::ServerAction::WriteOnce): Writes the pending open escrow
+    /// note to storage.
+    /// - [`EmitOpenEscrowNoteCreated`](privacy::actions::ServerAction::EmitOpenEscrowNoteCreated):
+    /// Emits an [`OpenEscrowNoteCreated`](privacy::events::OpenEscrowNoteCreated) event.
     ///
     /// **For [`Withdraw`](privacy::actions::ClientAction::Withdraw) action:**
     /// - [`TransferTo`](privacy::actions::ServerAction::TransferTo): Transfers tokens from the
@@ -451,14 +476,15 @@ pub trait IServer<T> {
     ///   - [`EmitNoteUsed`](privacy::actions::ServerAction::EmitNoteUsed): Emit a
     ///   [`NoteUsed`](privacy::events::NoteUsed) event.
     ///   - [`Invoke`](privacy::actions::ServerAction::Invoke): Invoke an external contract.
-    ///   - [`CreateEscrowNote`](privacy::actions::ServerAction::CreateEscrowNote): Store a
-    ///   private-value escrow note.
-    ///   - [`UseEscrowNote`](privacy::actions::ServerAction::UseEscrowNote): Nullify a
-    ///   private-value escrow note.
-    ///   - [`CreateOpenEscrowNote`](privacy::actions::ServerAction::CreateOpenEscrowNote): Store a
-    ///   pending public-value escrow note.
-    ///   - [`UseOpenEscrowNote`](privacy::actions::ServerAction::UseOpenEscrowNote): Nullify a
-    ///   public-value escrow note.
+    ///   - [`EmitEscrowNoteCreated`](privacy::actions::ServerAction::EmitEscrowNoteCreated): Emit
+    ///   an [`EscrowNoteCreated`](privacy::events::EscrowNoteCreated) event.
+    ///   - [`EmitEscrowNoteUsed`](privacy::actions::ServerAction::EmitEscrowNoteUsed): Emit an
+    ///   [`EscrowNoteUsed`](privacy::events::EscrowNoteUsed) event.
+    ///   -
+    ///   [`EmitOpenEscrowNoteCreated`](privacy::actions::ServerAction::EmitOpenEscrowNoteCreated):
+    ///   Emit an [`OpenEscrowNoteCreated`](privacy::events::OpenEscrowNoteCreated) event.
+    ///   - [`EmitOpenEscrowNoteUsed`](privacy::actions::ServerAction::EmitOpenEscrowNoteUsed): Emit
+    ///   an [`OpenEscrowNoteUsed`](privacy::events::OpenEscrowNoteUsed) event.
     /// - `screening` (`Option<`[`ScreeningAttestation`](privacy::snip12::ScreeningAttestation)`>`):
     /// off-chain authorization for the tx's screening subject. Signed by the configured screener
     /// over that address (taken from the proven actions — not the caller) and an `issued_at`
@@ -725,9 +751,6 @@ pub trait IViews<T> {
     /// #### Returns
     /// (`bool`): True if the nullifier exists in the contract, false otherwise.
     fn nullifier_exists(self: @T, nullifier: felt252) -> bool;
-
-    /// Returns whether an escrow-note nullifier has already been applied.
-    fn escrow_note_nullifier_exists(self: @T, nullifier: felt252) -> bool;
 
     /// Returns the registered public viewing key of the given user address.
     ///

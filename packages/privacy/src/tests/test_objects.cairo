@@ -1,7 +1,7 @@
 use privacy::actions::{ServerAction, WriteOnceInput};
 use privacy::objects::{
-    EncOutgoingChannelInfo, EncPrivateKey, EncSubchannelInfo, Note, TokenBalances,
-    TokenBalancesTrait,
+    EncOutgoingChannelInfo, EncPrivateKey, EncSubchannelInfo, EscrowNote, Note, OpenEscrowNote,
+    TokenBalances, TokenBalancesTrait,
 };
 use privacy::tests::test_objects::MockContract::deploy_for_test as deploy_mock_contract_for_test;
 use privacy::utils::to_write_once_action;
@@ -141,6 +141,58 @@ fn test_note_to_write_once_action() {
         action,
         ServerAction::WriteOnce(
             WriteOnceInput { storage_address, value: [enc_value, token.into()].span() },
+        ),
+    );
+}
+
+#[test]
+fn test_escrow_note_to_write_once_action() {
+    let note_commitment = 'NOTE_COMMITMENT';
+    let contract_address: ContractAddress = 'CONTRACT_ADDRESS'.try_into().unwrap();
+    let policy_commitment = 'POLICY_COMMITMENT';
+    let token: ContractAddress = 'TOKEN'.try_into().unwrap();
+    let note = EscrowNote { note_commitment, contract_address, policy_commitment, token };
+    let storage_address = map_entry_address(
+        map_selector: selector!("escrow_notes"), keys: ['KEY'].span(),
+    );
+
+    assert_eq!(
+        to_write_once_action(:storage_address, value: note),
+        ServerAction::WriteOnce(
+            WriteOnceInput {
+                storage_address,
+                value: [note_commitment, contract_address.into(), policy_commitment, token.into()]
+                    .span(),
+            },
+        ),
+    );
+}
+
+#[test]
+fn test_open_escrow_note_to_write_once_action() {
+    let opening_commitment = 'OPENING_COMMITMENT';
+    let amount: u128 = 0;
+    let contract_address: ContractAddress = 'CONTRACT_ADDRESS'.try_into().unwrap();
+    let policy_commitment = 'POLICY_COMMITMENT';
+    let token: ContractAddress = 'TOKEN'.try_into().unwrap();
+    let note = OpenEscrowNote {
+        opening_commitment, amount, contract_address, policy_commitment, token,
+    };
+    let storage_address = map_entry_address(
+        map_selector: selector!("open_escrow_notes"), keys: ['KEY'].span(),
+    );
+
+    assert_eq!(
+        to_write_once_action(:storage_address, value: note),
+        ServerAction::WriteOnce(
+            WriteOnceInput {
+                storage_address,
+                value: [
+                    opening_commitment, amount.into(), contract_address.into(), policy_commitment,
+                    token.into(),
+                ]
+                    .span(),
+            },
         ),
     );
 }

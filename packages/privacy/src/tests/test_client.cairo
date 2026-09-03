@@ -136,7 +136,7 @@ fn test_action_enum_discriminants_are_append_only() {
     assert_eq!(server_action_variant(ServerAction::InvokeWithComputation(invoke)), 11);
     assert_eq!(
         server_action_variant(
-            ServerAction::CreateOpenEscrowNote(
+            ServerAction::EmitOpenEscrowNoteCreated(
                 events::OpenEscrowNoteCreated {
                     note_id: 1,
                     contract_address: 1.try_into().unwrap(),
@@ -150,7 +150,7 @@ fn test_action_enum_discriminants_are_append_only() {
     );
     assert_eq!(
         server_action_variant(
-            ServerAction::UseOpenEscrowNote(
+            ServerAction::EmitOpenEscrowNoteUsed(
                 events::OpenEscrowNoteUsed {
                     nullifier: 1,
                     contract_address: 1.try_into().unwrap(),

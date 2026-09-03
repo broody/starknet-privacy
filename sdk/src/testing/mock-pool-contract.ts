@@ -143,10 +143,6 @@ export class MockPoolContract implements MockContract, PoolContractInterface {
     };
   }
 
-  escrow_note_nullifier_exists(_nullifier: bigint): boolean {
-    return false;
-  }
-
   get_num_of_channels(recipientAddr: StarknetAddressBigint): bigint {
     if (!this.publicKeys.has(recipientAddr)) return 0n;
     const pk = this.publicKeys.get(recipientAddr)!;

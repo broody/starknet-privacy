@@ -71,7 +71,6 @@ export interface PoolContractInterface {
   get_escrow_note(noteId: BigNumberish): EscrowNote | Promise<EscrowNote>;
   get_open_escrow_note(noteId: BigNumberish): OpenEscrowNote | Promise<OpenEscrowNote>;
   nullifier_exists(nullifier: BigNumberish): boolean | Promise<boolean>;
-  escrow_note_nullifier_exists(nullifier: BigNumberish): boolean | Promise<boolean>;
   get_public_key(userAddr: BigNumberish): BigNumberish | Promise<BigNumberish>;
   get_enc_private_key(userAddr: BigNumberish): EncPrivateKey | Promise<EncPrivateKey>;
   get_auditor_public_key(): BigNumberish | Promise<BigNumberish>;

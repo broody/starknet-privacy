@@ -109,19 +109,19 @@ pub mod MockNoteController {
             let mut spent_nullifier: felt252 = Zero::zero();
             for action in actions {
                 match *action {
-                    ServerAction::CreateEscrowNote(event) => {
+                    ServerAction::EmitEscrowNoteCreated(event) => {
                         created_count += 1;
                         created_note_id = event.note_id;
                     },
-                    ServerAction::UseEscrowNote(event) => {
+                    ServerAction::EmitEscrowNoteUsed(event) => {
                         spent_count += 1;
                         spent_nullifier = event.nullifier;
                     },
-                    ServerAction::CreateOpenEscrowNote(event) => {
+                    ServerAction::EmitOpenEscrowNoteCreated(event) => {
                         created_count += 1;
                         created_note_id = event.note_id;
                     },
-                    ServerAction::UseOpenEscrowNote(event) => {
+                    ServerAction::EmitOpenEscrowNoteUsed(event) => {
                         spent_count += 1;
                         spent_nullifier = event.nullifier;
                     },

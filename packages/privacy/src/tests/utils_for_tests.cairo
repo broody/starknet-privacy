@@ -2141,10 +2141,6 @@ pub(crate) impl PrivacyCfgImpl of PrivacyCfgTrait {
         self.views.get_open_escrow_note(:note_id)
     }
 
-    fn escrow_note_nullifier_exists(self: @PrivacyCfg, nullifier: felt252) -> bool {
-        self.views.escrow_note_nullifier_exists(:nullifier)
-    }
-
     fn wrap_inputs_into_calls(
         self: @PrivacyCfg,
         user_addr: ContractAddress,
@@ -2293,7 +2289,7 @@ fn creates_open_notes(actions: Span<ServerAction>) -> bool {
     for action in actions {
         match *action {
             ServerAction::EmitOpenNoteCreated(_) |
-            ServerAction::CreateOpenEscrowNote(_) => {
+            ServerAction::EmitOpenEscrowNoteCreated(_) => {
                 creates = true;
                 break;
             },
