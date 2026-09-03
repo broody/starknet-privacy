@@ -65,6 +65,7 @@ const STRUCTS_TO_GENERATE = [
   "privacy::objects::Note",
   "privacy::objects::EncPrivateKey",
   "privacy::objects::EscrowNote",
+  "privacy::objects::OpenEscrowNote",
 ];
 
 type AbiStruct = {

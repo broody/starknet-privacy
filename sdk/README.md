@@ -71,11 +71,13 @@ This section describes the recommended integration patterns. Each subsection giv
 
 ### Escrow notes
 
-Use `createEscrowNote` and `useEscrowNote` for private-value notes whose lifecycle is
-authorized by an application contract. Always add `.invoke()` (or `.computeAndInvoke()`) targeting
-that same contract; the pool routes it to the dedicated escrow-note callback and reverts all
-note and application state if authorization fails. For example, Whisper uses escrow notes to keep
-sealed bids private while its auction contract controls settlement and refunds.
+Escrow notes are contract-governed notes. Always add `.invoke()` (or `.computeAndInvoke()`)
+targeting the governing contract; the pool routes it to the dedicated escrow callback and reverts
+all note and application state if authorization or funding fails.
+
+Use `createEscrowNote` and `useEscrowNote` when the amount must remain private. For example, Whisper
+uses private-value escrow notes to keep sealed bids private while its auction contract controls
+settlement and refunds.
 
 ```typescript
 await transfers
@@ -93,12 +95,37 @@ await transfers
   .execute();
 ```
 
-The `secret` and amount opening are secret prover inputs. Generate the secret with cryptographic
-randomness, retain it until spend, and never log or publish it.
+Use `createOpenEscrowNote` and `useOpenEscrowNote` when the amount can be public and is determined by
+the application callback. Creation does not consume private balance: the bound contract must fund
+the pending note exactly once in the same transaction. The invoke builder exposes the derived note
+ID so it can be included in application calldata.
+
+```typescript
+await transfers
+  .build()
+  .with(STRK)
+  .createOpenEscrowNote({
+    contractAddress: lendingMarket,
+    policyCommitment: positionCommitment,
+    secret: privateRandomSecret,
+  })
+  .done()
+  .invoke(({ openEscrowNotes }) => ({
+    contractAddress: lendingMarket,
+    calldata: [openEscrowNotes[0].noteId],
+  }))
+  .execute();
+```
+
+The `secret` is always a secret prover input. The `EscrowNote` amount is private; the
+`OpenEscrowNote` amount is public and checked against pool state. Generate secrets with
+cryptographic randomness, retain them until spend, and never log or publish them.
 The escrow-note callback must verify the pool caller, call `validate_escrow_note_context`, and
 bind any stored authorization to `actions_hash`; checking only the policy commitment does not
-constrain where the controlled value goes. Escrow notes remain bound to the application contract
-address across upgrades. Applications must preserve the callback ABI and policy semantics needed by
+constrain where the controlled value goes. It returns an `EscrowNoteInvokeResult`; for each new
+`OpenEscrowNote`, this must contain a matching `OpenEscrowNoteDeposit`, and the application must
+approve the pool to pull that amount. Escrow notes remain bound to the application contract address
+across upgrades. Applications must preserve the callback ABI and policy semantics needed by
 outstanding notes, and can disable upgrades when immutability is required.
 
 ### State management: go stateless

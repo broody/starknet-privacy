@@ -21,7 +21,12 @@ import { createRateLimitedObject, type RateLimitOptions } from "../utils/rate-li
 import type { PoolContractInterface, NoteData } from "./pool-contract-interface.js";
 
 // Re-export types from generated file
-export type { PoolContractInterface, NoteData, EscrowNote } from "./pool-contract-interface.js";
+export type {
+  PoolContractInterface,
+  NoteData,
+  EscrowNote,
+  OpenEscrowNote,
+} from "./pool-contract-interface.js";
 
 class NotesDiscovery {
   private readonly tracker = new Tracker();

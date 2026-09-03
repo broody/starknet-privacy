@@ -221,6 +221,31 @@ export type UseEscrowNoteAction = EscrowNoteSpend & {
   token: StarknetAddressBigint;
 };
 
+/** Creates a publicly valued note governed and funded by an application contract. */
+export type OpenEscrowNoteCreation = {
+  contractAddress: StarknetAddress;
+  policyCommitment: BigNumberish;
+  /** Secret, non-zero random felt retained by the creator until the note is spent. */
+  secret: BigNumberish;
+};
+
+/** Private opening of an existing publicly valued escrow note. */
+export type OpenEscrowNoteSpend = {
+  noteId: NoteId;
+  /** Public amount, checked against the note stored by the pool. */
+  amount: Amount;
+  secret: BigNumberish;
+};
+
+export type CreateOpenEscrowNoteAction = OpenEscrowNoteCreation & {
+  token: StarknetAddressBigint;
+};
+
+export type UseOpenEscrowNoteAction = OpenEscrowNoteSpend & {
+  /** Used for local balance planning; the pool verifies the token from note state. */
+  token: StarknetAddressBigint;
+};
+
 export type CreateNoteAction = {
   recipient: StarknetAddressBigint;
   token: StarknetAddressBigint;
@@ -243,6 +268,13 @@ export type InvokeOpenNote = {
   token: StarknetAddressBigint;
 };
 
+export type InvokeOpenEscrowNote = {
+  noteId: NoteId;
+  token: StarknetAddressBigint;
+  contractAddress: StarknetAddressBigint;
+  policyCommitment: bigint;
+};
+
 export type InvokeWithdrawal = {
   recipient: StarknetAddressBigint;
   token: StarknetAddressBigint;
@@ -251,6 +283,7 @@ export type InvokeWithdrawal = {
 
 export type InvokeCalldataBuilderArgs = {
   openNotes: InvokeOpenNote[];
+  openEscrowNotes: InvokeOpenEscrowNote[];
   withdrawals: InvokeWithdrawal[];
   poolAddress: StarknetAddressBigint;
 };
@@ -282,8 +315,10 @@ export type Actions = {
   deposits?: DepositAction[];
   useNotes?: UseNoteAction[];
   useEscrowNotes?: UseEscrowNoteAction[];
+  useOpenEscrowNotes?: UseOpenEscrowNoteAction[];
   createNotes?: CreateNoteAction[];
   createEscrowNotes?: CreateEscrowNoteAction[];
+  createOpenEscrowNotes?: CreateOpenEscrowNoteAction[];
   withdraws?: WithdrawAction[];
   surpluses?: SurplusAction[];
   invoke?: InvokeAction;
@@ -624,6 +659,12 @@ export interface TokenOperationsBuilder {
   useEscrowNote(...notes: EscrowNoteSpend[]): this;
 
   /**
+   * Consume publicly valued escrow notes as private inputs. The supplied amount must match public
+   * pool state, and the same transaction must invoke the note's application contract.
+   */
+  useOpenEscrowNote(...notes: OpenEscrowNoteSpend[]): this;
+
+  /**
    * Deposit this token.
    * @param inputs Array of inputs to deposit. Each input can be a recipient address or a note id.
    */
@@ -644,6 +685,13 @@ export interface TokenOperationsBuilder {
    * the application contract to authorize creation.
    */
   createEscrowNote(...outputs: EscrowNoteCreation[]): this;
+
+  /**
+   * Create pending, publicly valued escrow notes. The application callback must fund each note
+   * exactly once in the same transaction. The invoke builder receives their derived IDs through
+   * `openEscrowNotes`.
+   */
+  createOpenEscrowNote(...outputs: OpenEscrowNoteCreation[]): this;
 
   /**
    * Set the recipient for any surplus for this token.

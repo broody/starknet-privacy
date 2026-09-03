@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ClientAction } from "../../src/internal/client-actions.js";
 import { bigintReviver } from "../../src/testing/mock-proof-invocation-factory.js";
 import { toBigInt } from "../../src/utils/index.js";
+import { compute_open_escrow_note_id } from "../../src/utils/hashes.js";
 import { createTestEnv } from "../helpers/test-fixtures.js";
 
 const CONTROLLER = "0xabc";
@@ -65,6 +66,102 @@ describe("escrow note builder", () => {
       "Withdraw",
       "InvokeExternal",
     ]);
+  });
+
+  it("derives an open escrow note ID for atomic callback funding", async () => {
+    const { env, transfers } = createTestEnv();
+    const expectedNoteId = compute_open_escrow_note_id(
+      toBigInt(env.alice.address),
+      0xabcn,
+      91n,
+      toBigInt(env.ace),
+      123n
+    );
+
+    const result = await transfers.alice
+      .build()
+      .with(env.ace)
+      .createOpenEscrowNote({
+        contractAddress: CONTROLLER,
+        policyCommitment: 91n,
+        secret: 123n,
+      })
+      .done()
+      .invoke(({ openEscrowNotes }) => {
+        expect(openEscrowNotes).toEqual([
+          {
+            noteId: expectedNoteId,
+            token: toBigInt(env.ace),
+            contractAddress: 0xabcn,
+            policyCommitment: 91n,
+          },
+        ]);
+        return { contractAddress: CONTROLLER, calldata: [expectedNoteId, 37n] };
+      })
+      .createProofInvocation();
+
+    expect(clientActions(result.invocation.calldata)).toEqual([
+      {
+        type: "CreateOpenEscrowNote",
+        input: {
+          contract_address: 0xabcn,
+          policy_commitment: 91n,
+          token: toBigInt(env.ace),
+          secret: 123n,
+        },
+      },
+      {
+        type: "InvokeExternal",
+        input: { contract_address: 0xabcn, calldata: [expectedNoteId, 37n] },
+      },
+    ]);
+  });
+
+  it("uses an open escrow note as a public-amount private input", async () => {
+    const { env, transfers } = createTestEnv();
+
+    const result = await transfers.alice
+      .build()
+      .with(env.ace)
+      .useOpenEscrowNote({ noteId: 123n, amount: 37n, secret: 456n })
+      .withdraw({ recipient: env.alice.address, amount: 37n })
+      .done()
+      .invoke(() => ({ contractAddress: CONTROLLER, calldata: [] }))
+      .createProofInvocation();
+
+    expect(clientActions(result.invocation.calldata).map((action) => action.type)).toEqual([
+      "UseOpenEscrowNote",
+      "Withdraw",
+      "InvokeExternal",
+    ]);
+  });
+
+  it("applies invoke and target invariants to open escrow notes", async () => {
+    const { env, transfers } = createTestEnv();
+    const withoutInvoke = transfers.alice.build().with(env.ace).createOpenEscrowNote({
+      contractAddress: CONTROLLER,
+      policyCommitment: 91n,
+      secret: 123n,
+    });
+
+    await expect(withoutInvoke.createProofInvocation()).rejects.toThrow(
+      "Escrow-note creation and spend require .invoke() or .computeAndInvoke()"
+    );
+
+    const wrongTarget = transfers.alice
+      .build()
+      .with(env.ace)
+      .createOpenEscrowNote({
+        contractAddress: CONTROLLER,
+        policyCommitment: 91n,
+        secret: 123n,
+      })
+      .done()
+      .invoke(() => ({ contractAddress: OTHER_CONTROLLER, calldata: [] }));
+
+    await expect(wrongTarget.createProofInvocation()).rejects.toThrow(
+      "The invoke target must match the contract of created escrow notes"
+    );
   });
 
   it("fails fast without an invoke or when a creation targets a different contract", async () => {

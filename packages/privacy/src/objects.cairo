@@ -148,6 +148,33 @@ pub struct EscrowNote {
     pub token: ContractAddress,
 }
 
+/// A publicly valued note whose spend policy is enforced by a contract callback.
+///
+/// The note is created with `amount = 0` and must be funded exactly once by its bound application
+/// contract in the same transaction.
+#[derive(Serde, Copy, Drop, PartialEq, Debug, starknet::Store)]
+pub struct OpenEscrowNote {
+    /// Commitment proving knowledge of the private secret used to spend the note.
+    pub opening_commitment: felt252,
+    /// Public amount. Zero only while the note is awaiting its atomic callback deposit.
+    pub amount: u128,
+    /// Contract that must fund the note and authorize every spend.
+    pub contract_address: ContractAddress,
+    /// Application-specific commitment interpreted by the authorizing contract.
+    pub policy_commitment: felt252,
+    /// ERC20 token held by the note.
+    pub token: ContractAddress,
+}
+
+/// A callback-funded deposit into a pending open escrow note.
+#[derive(Serde, Copy, Drop, PartialEq, Debug)]
+pub struct OpenEscrowNoteDeposit {
+    /// Identifier of the pending open escrow note.
+    pub note_id: felt252,
+    /// Public amount transferred from the bound application contract into the pool.
+    pub amount: u128,
+}
+
 /// Pool-derived context prepended to an escrow-note callback's calldata.
 ///
 /// `actions_hash` commits to the exact proven server-action list. Application contracts should bind
@@ -158,4 +185,16 @@ pub struct EscrowNoteContext {
     /// Canonical Serde encoding of the exact `Span<ServerAction>` committed by `actions_hash`.
     /// Contracts can deserialize this to enforce output disposition without a prior state write.
     pub serialized_actions: Span<felt252>,
+}
+
+/// Exact return shape for escrow-note callbacks.
+///
+/// Regular invoke callbacks retain their existing return ABI. Escrow callbacks can atomically fund
+/// both recipient-owned open notes and contract-governed open escrow notes.
+#[derive(Serde, Copy, Drop)]
+pub struct EscrowNoteInvokeResult {
+    pub open_note_deposits: Span<OpenNoteDeposit>,
+    pub open_escrow_note_deposits: Span<OpenEscrowNoteDeposit>,
+    /// Addresses associated with delegated compute-and-invoke deposits. Empty otherwise.
+    pub associated_addresses: Span<ContractAddress>,
 }

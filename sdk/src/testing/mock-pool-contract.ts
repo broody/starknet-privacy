@@ -28,6 +28,7 @@ import type {
   EncOutgoingChannelInfo,
   EncPrivateKey,
   EscrowNote,
+  OpenEscrowNote,
 } from "../internal/pool-contract-interface.js";
 import { AdvancedMap, AddressMap } from "../utils/maps.js";
 import { assert, isOpen } from "../utils/validation.js";
@@ -126,6 +127,16 @@ export class MockPoolContract implements MockContract, PoolContractInterface {
   get_escrow_note(_noteId: bigint): EscrowNote {
     return {
       note_commitment: 0n,
+      contract_address: 0n,
+      policy_commitment: 0n,
+      token: 0n,
+    };
+  }
+
+  get_open_escrow_note(_noteId: bigint): OpenEscrowNote {
+    return {
+      opening_commitment: 0n,
+      amount: 0n,
       contract_address: 0n,
       policy_commitment: 0n,
       token: 0n,

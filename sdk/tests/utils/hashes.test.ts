@@ -23,6 +23,9 @@ import {
   compute_escrow_note_id,
   compute_escrow_note_commitment,
   compute_escrow_note_nullifier,
+  compute_open_escrow_note_id,
+  compute_open_escrow_note_opening_commitment,
+  compute_open_escrow_note_nullifier,
 } from "../../src/utils/hashes.js";
 import referenceHashes from "../fixtures/cairo-reference-data.json" with { type: "json" };
 
@@ -129,6 +132,31 @@ describe("Hash Compatibility with Cairo", () => {
     expect(noteCommitment.toString(16)).toBe(BigInt(outputs.escrowNoteCommitment).toString(16));
     expect(compute_escrow_note_nullifier(escrowNoteId, escrowNoteSecret).toString(16)).toBe(
       BigInt(outputs.escrowNoteNullifier).toString(16)
+    );
+  });
+
+  it("open escrow note hashes match Cairo", () => {
+    const noteId = compute_open_escrow_note_id(
+      sender,
+      contractAddress,
+      policyCommitment,
+      token,
+      escrowNoteSecret
+    );
+    expect(noteId.toString(16)).toBe(BigInt(outputs.openEscrowNoteId).toString(16));
+
+    const openingCommitment = compute_open_escrow_note_opening_commitment(
+      noteId,
+      contractAddress,
+      policyCommitment,
+      token,
+      escrowNoteSecret
+    );
+    expect(openingCommitment.toString(16)).toBe(
+      BigInt(outputs.openEscrowNoteOpeningCommitment).toString(16)
+    );
+    expect(compute_open_escrow_note_nullifier(noteId, escrowNoteSecret).toString(16)).toBe(
+      BigInt(outputs.openEscrowNoteNullifier).toString(16)
     );
   });
 });

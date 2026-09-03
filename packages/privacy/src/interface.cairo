@@ -1,7 +1,7 @@
 use privacy::actions::{ClientAction, ServerAction};
 use privacy::objects::{
     EncChannelInfo, EncOutgoingChannelInfo, EncPrivateKey, EncSubchannelInfo, EscrowNote, Note,
-    OpenNoteScreeningPolicy,
+    OpenEscrowNote, OpenNoteScreeningPolicy,
 };
 use privacy::snip12::ScreeningAttestation;
 use starknet::ContractAddress;
@@ -263,6 +263,14 @@ pub trait IClient<T> {
     ///   - [`Deposit`](privacy::actions::ClientAction::Deposit): Deposit funds into the contract.
     ///   - [`UseNote`](privacy::actions::ClientAction::UseNote): Uses up a note (creates a
     ///   nullifier for it).
+    ///   - [`CreateEscrowNote`](privacy::actions::ClientAction::CreateEscrowNote): Creates a
+    ///   private-value note governed by an application contract.
+    ///   - [`UseEscrowNote`](privacy::actions::ClientAction::UseEscrowNote): Opens and consumes a
+    ///   private-value escrow note.
+    ///   - [`CreateOpenEscrowNote`](privacy::actions::ClientAction::CreateOpenEscrowNote): Creates
+    ///   a public-value escrow note that its application callback must fund atomically.
+    ///   - [`UseOpenEscrowNote`](privacy::actions::ClientAction::UseOpenEscrowNote): Opens and
+    ///   consumes a public-value escrow note.
     ///   - [`Withdraw`](privacy::actions::ClientAction::Withdraw): Withdraw funds from the
     ///   contract.
     ///   - [`InvokeExternal`](privacy::actions::ClientAction::InvokeExternal): Invokes an external
@@ -339,7 +347,9 @@ pub trait IClient<T> {
     /// - `client_actions` must be valid sequential actions to execute on the current state of the
     /// contract.
     /// - `client_actions` must be ordered by phase: SetViewingKey, OpenChannel, OpenSubchannel,
-    /// Deposit, UseNote, CreateEncNote/CreateOpenNote, Withdraw, InvokeExternal.
+    /// Deposit, UseNote/UseEscrowNote/UseOpenEscrowNote,
+    /// CreateEncNote/CreateOpenNote/CreateEscrowNote/CreateOpenEscrowNote, Withdraw,
+    /// InvokeExternal/ComputeAndInvoke.
     /// - At most one [`InvokeExternal`](privacy::actions::ClientAction::InvokeExternal) action is
     /// allowed per transaction.
     /// - At least one action that provides replay protection must be included
@@ -441,6 +451,14 @@ pub trait IServer<T> {
     ///   - [`EmitNoteUsed`](privacy::actions::ServerAction::EmitNoteUsed): Emit a
     ///   [`NoteUsed`](privacy::events::NoteUsed) event.
     ///   - [`Invoke`](privacy::actions::ServerAction::Invoke): Invoke an external contract.
+    ///   - [`CreateEscrowNote`](privacy::actions::ServerAction::CreateEscrowNote): Store a
+    ///   private-value escrow note.
+    ///   - [`UseEscrowNote`](privacy::actions::ServerAction::UseEscrowNote): Nullify a
+    ///   private-value escrow note.
+    ///   - [`CreateOpenEscrowNote`](privacy::actions::ServerAction::CreateOpenEscrowNote): Store a
+    ///   pending public-value escrow note.
+    ///   - [`UseOpenEscrowNote`](privacy::actions::ServerAction::UseOpenEscrowNote): Nullify a
+    ///   public-value escrow note.
     /// - `screening` (`Option<`[`ScreeningAttestation`](privacy::snip12::ScreeningAttestation)`>`):
     /// off-chain authorization for the tx's screening subject. Signed by the configured screener
     /// over that address (taken from the proven actions — not the caller) and an `issued_at`
@@ -460,9 +478,11 @@ pub trait IServer<T> {
     /// must be empty (zero) before writing.
     /// - For [`TransferFrom`](privacy::actions::ServerAction::TransferFrom) actions, the sender
     /// must have sufficient token balance and allowance.
-    /// - For [`Invoke`](privacy::actions::ServerAction::Invoke) actions, the invoked contract must
-    /// have an [`INVOKE_SELECTOR`](privacy::utils::constants::INVOKE_SELECTOR) selector for a
-    /// method that returns a `Span<`[`OpenNoteDeposit`](privacy::objects::OpenNoteDeposit)`>`.
+    /// - A regular [`Invoke`](privacy::actions::ServerAction::Invoke) calls
+    /// [`INVOKE_SELECTOR`](privacy::utils::constants::INVOKE_SELECTOR) and retains its existing
+    /// return ABI. A transaction containing escrow-note actions instead calls the dedicated escrow
+    /// selector and must return an
+    /// [`EscrowNoteInvokeResult`](privacy::objects::EscrowNoteInvokeResult).
     /// - Every address the tx's actions require screening for must be covered by a fresh, valid
     /// `screening` attestation, and the actions must not require more than one distinct address.
     /// A regular-pool deposit ([`TransferFrom`](privacy::actions::ServerAction::TransferFrom))
@@ -493,6 +513,13 @@ pub trait IServer<T> {
     /// - [`OpenNoteDeposited`](privacy::events::OpenNoteDeposited): Emitted for each
     /// `OpenNoteDeposit` returned by an [`Invoke`](privacy::actions::ServerAction::Invoke) or
     /// [`InvokeWithComputation`](privacy::actions::ServerAction::InvokeWithComputation) action.
+    /// - [`EscrowNoteCreated`](privacy::events::EscrowNoteCreated) and
+    /// [`EscrowNoteUsed`](privacy::events::EscrowNoteUsed): Emitted for private-value escrow-note
+    /// lifecycle actions.
+    /// - [`OpenEscrowNoteCreated`](privacy::events::OpenEscrowNoteCreated),
+    /// [`OpenEscrowNoteDeposited`](privacy::events::OpenEscrowNoteDeposited), and
+    /// [`OpenEscrowNoteUsed`](privacy::events::OpenEscrowNoteUsed): Emitted for public-value
+    /// escrow-note creation, callback funding, and spend.
     /// - [`ExternalContractInvoked`](privacy::events::ExternalContractInvoked): Emitted for each
     /// [`Invoke`](privacy::actions::ServerAction::Invoke) or
     /// [`InvokeWithComputation`](privacy::actions::ServerAction::InvokeWithComputation) action.
@@ -686,6 +713,9 @@ pub trait IViews<T> {
 
     /// Returns the commitment and application metadata for an escrow note.
     fn get_escrow_note(self: @T, note_id: felt252) -> EscrowNote;
+
+    /// Returns the public amount and application metadata for an open escrow note.
+    fn get_open_escrow_note(self: @T, note_id: felt252) -> OpenEscrowNote;
 
     /// Checks if a nullifier exists.
     ///

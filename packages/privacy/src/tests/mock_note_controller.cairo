@@ -1,6 +1,6 @@
 //! Escrow-note callback used to exercise escrow-note authorization and context binding.
 
-use privacy::objects::{EscrowNoteContext, OpenNoteDeposit};
+use privacy::objects::{EscrowNoteContext, EscrowNoteInvokeResult};
 use starknet::ClassHash;
 
 #[starknet::interface]
@@ -8,20 +8,23 @@ pub trait IMockNoteController<T> {
     fn upgrade(ref self: T, new_class_hash: ClassHash);
     fn set_allowed(ref self: T, allowed: bool);
     fn set_expected_actions_hash(ref self: T, expected_actions_hash: felt252);
+    fn set_open_escrow_deposit(ref self: T, note_id: felt252, amount: u128);
     fn callback_count(self: @T) -> u32;
     fn last_actions_hash(self: @T) -> felt252;
     fn last_created_note_id(self: @T) -> felt252;
     fn last_spent_nullifier(self: @T) -> felt252;
     fn privacy_escrow_note_invoke(
         ref self: T, context: EscrowNoteContext, marker: felt252,
-    ) -> Span<OpenNoteDeposit>;
+    ) -> EscrowNoteInvokeResult;
 }
 
 #[starknet::contract]
 pub mod MockNoteController {
     use core::num::traits::Zero;
     use privacy::actions::ServerAction;
-    use privacy::objects::{EscrowNoteContext, OpenNoteDeposit};
+    use privacy::objects::{
+        EscrowNoteContext, EscrowNoteInvokeResult, OpenEscrowNoteDeposit, OpenNoteDeposit,
+    };
     use privacy::utils::validate_escrow_note_context;
     use starknet::storage::{StoragePointerReadAccess, StoragePointerWriteAccess};
     use starknet::syscalls::replace_class_syscall;
@@ -37,6 +40,8 @@ pub mod MockNoteController {
         pool_address: ContractAddress,
         allowed: bool,
         expected_actions_hash: felt252,
+        open_escrow_deposit_note_id: felt252,
+        open_escrow_deposit_amount: u128,
         callback_count: u32,
         last_actions_hash: felt252,
         last_created_note_id: felt252,
@@ -63,6 +68,11 @@ pub mod MockNoteController {
             self.expected_actions_hash.write(expected_actions_hash);
         }
 
+        fn set_open_escrow_deposit(ref self: ContractState, note_id: felt252, amount: u128) {
+            self.open_escrow_deposit_note_id.write(note_id);
+            self.open_escrow_deposit_amount.write(amount);
+        }
+
         fn callback_count(self: @ContractState) -> u32 {
             self.callback_count.read()
         }
@@ -81,7 +91,7 @@ pub mod MockNoteController {
 
         fn privacy_escrow_note_invoke(
             ref self: ContractState, context: EscrowNoteContext, marker: felt252,
-        ) -> Span<OpenNoteDeposit> {
+        ) -> EscrowNoteInvokeResult {
             let pool_address = get_caller_address();
             assert(pool_address == self.pool_address.read(), 'CALLER_NOT_POOL');
             assert(marker == CALLBACK_MARKER, 'WRONG_MARKER');
@@ -107,6 +117,14 @@ pub mod MockNoteController {
                         spent_count += 1;
                         spent_nullifier = event.nullifier;
                     },
+                    ServerAction::CreateOpenEscrowNote(event) => {
+                        created_count += 1;
+                        created_note_id = event.note_id;
+                    },
+                    ServerAction::UseOpenEscrowNote(event) => {
+                        spent_count += 1;
+                        spent_nullifier = event.nullifier;
+                    },
                     _ => {},
                 }
             }
@@ -116,7 +134,27 @@ pub mod MockNoteController {
             self.last_created_note_id.write(created_note_id);
             self.last_spent_nullifier.write(spent_nullifier);
             self.callback_count.write(self.callback_count.read() + 1);
-            [].span()
+
+            let open_note_deposits: Array<OpenNoteDeposit> = array![];
+            let mut open_escrow_note_deposits: Array<OpenEscrowNoteDeposit> = array![];
+            let deposit_note_id = self.open_escrow_deposit_note_id.read();
+            if deposit_note_id.is_non_zero() {
+                open_escrow_note_deposits
+                    .append(
+                        OpenEscrowNoteDeposit {
+                            note_id: deposit_note_id,
+                            amount: self.open_escrow_deposit_amount.read(),
+                        },
+                    );
+                self.open_escrow_deposit_note_id.write(0);
+                self.open_escrow_deposit_amount.write(0);
+            }
+            let associated_addresses: Array<ContractAddress> = array![];
+            EscrowNoteInvokeResult {
+                open_note_deposits: open_note_deposits.span(),
+                open_escrow_note_deposits: open_escrow_note_deposits.span(),
+                associated_addresses: associated_addresses.span(),
+            }
         }
     }
 }

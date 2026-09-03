@@ -71,6 +71,10 @@ export class PoolSimulator {
         // Escrow-note state is intentionally outside the private channel registry.
         break;
 
+      case "UseOpenEscrowNote":
+        // Escrow-note state is intentionally outside the private channel registry.
+        break;
+
       case "CreateEncNote":
         this.handleCreateEncNote(action.input);
         break;
@@ -80,6 +84,10 @@ export class PoolSimulator {
         break;
 
       case "CreateEscrowNote":
+        // Escrow-note state is intentionally outside the private channel registry.
+        break;
+
+      case "CreateOpenEscrowNote":
         // Escrow-note state is intentionally outside the private channel registry.
         break;
 

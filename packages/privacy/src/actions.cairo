@@ -172,6 +172,29 @@ pub(crate) impl CreateEscrowNoteInputValid of InputValidation<CreateEscrowNoteIn
     }
 }
 
+/// Input for the `CreateOpenEscrowNote` action.
+#[derive(Serde, Copy, Drop, PartialEq, Debug)]
+pub struct CreateOpenEscrowNoteInput {
+    /// The address of the contract that must fund and govern the note.
+    pub contract_address: ContractAddress,
+    /// The application-specific policy commitment.
+    pub policy_commitment: felt252,
+    /// The token that the callback will deposit.
+    pub token: ContractAddress,
+    /// Private random value used to derive the note ID, opening commitment, and nullifier.
+    pub secret: felt252,
+}
+
+pub(crate) impl CreateOpenEscrowNoteInputValid of InputValidation<CreateOpenEscrowNoteInput> {
+    fn assert_valid(self: CreateOpenEscrowNoteInput) {
+        let CreateOpenEscrowNoteInput { contract_address, policy_commitment, token, secret } = self;
+        assert(contract_address.is_non_zero(), errors::ZERO_CONTRACT_ADDRESS);
+        assert(policy_commitment.is_non_zero(), errors::ZERO_POLICY_COMMITMENT);
+        assert(token.is_non_zero(), errors::ZERO_TOKEN);
+        assert(secret.is_non_zero(), errors::ZERO_ESCROW_NOTE_SECRET);
+    }
+}
+
 /// Input for the `Deposit` action.
 #[derive(Serde, Copy, Drop, PartialEq, Debug)]
 pub struct DepositInput {
@@ -221,6 +244,27 @@ pub struct UseEscrowNoteInput {
 pub(crate) impl UseEscrowNoteInputValid of InputValidation<UseEscrowNoteInput> {
     fn assert_valid(self: UseEscrowNoteInput) {
         let UseEscrowNoteInput { note_id, amount, secret } = self;
+        assert(note_id.is_non_zero(), errors::ZERO_NOTE_ID);
+        assert(amount.is_non_zero(), errors::ZERO_AMOUNT);
+        assert(secret.is_non_zero(), errors::ZERO_ESCROW_NOTE_SECRET);
+    }
+}
+
+/// Input for the `UseOpenEscrowNote` action.
+#[derive(Serde, Copy, Drop, PartialEq, Debug)]
+pub struct UseOpenEscrowNoteInput {
+    /// Identifier emitted when the open escrow note was created.
+    pub note_id: felt252,
+    /// Public amount expected in the funded note. Used by SDK balance planning and checked by the
+    /// pool against storage.
+    pub amount: u128,
+    /// Private note secret retained by an authorized prover.
+    pub secret: felt252,
+}
+
+pub(crate) impl UseOpenEscrowNoteInputValid of InputValidation<UseOpenEscrowNoteInput> {
+    fn assert_valid(self: UseOpenEscrowNoteInput) {
+        let UseOpenEscrowNoteInput { note_id, amount, secret } = self;
         assert(note_id.is_non_zero(), errors::ZERO_NOTE_ID);
         assert(amount.is_non_zero(), errors::ZERO_AMOUNT);
         assert(secret.is_non_zero(), errors::ZERO_ESCROW_NOTE_SECRET);
@@ -323,6 +367,10 @@ pub enum ClientAction {
     CreateEscrowNote: CreateEscrowNoteInput,
     /// Opens and consumes an escrow note, subject to that contract's atomic authorization.
     UseEscrowNote: UseEscrowNoteInput,
+    /// Creates an empty, publicly valued escrow note that the invoked application must fund.
+    CreateOpenEscrowNote: CreateOpenEscrowNoteInput,
+    /// Opens and consumes a funded open escrow note under its contract's atomic authorization.
+    UseOpenEscrowNote: UseOpenEscrowNoteInput,
 }
 
 #[generate_trait]
@@ -346,8 +394,10 @@ pub(crate) impl ClientActionImpl of ClientActionTrait {
             ClientAction::CreateEncNote(_) => Self::CREATE_NOTES_PHASE,
             ClientAction::CreateOpenNote(_) => Self::CREATE_NOTES_PHASE,
             ClientAction::CreateEscrowNote(_) => Self::CREATE_NOTES_PHASE,
+            ClientAction::CreateOpenEscrowNote(_) => Self::CREATE_NOTES_PHASE,
             ClientAction::UseNote(_) => Self::USE_NOTES_PHASE,
             ClientAction::UseEscrowNote(_) => Self::USE_NOTES_PHASE,
+            ClientAction::UseOpenEscrowNote(_) => Self::USE_NOTES_PHASE,
             ClientAction::Withdraw(_) => Self::WITHDRAW_PHASE,
             ClientAction::InvokeExternal(_) => Self::INVOKE_PHASE,
             ClientAction::ComputeAndInvoke(_) => Self::INVOKE_PHASE,
@@ -455,4 +505,8 @@ pub enum ServerAction {
     CreateEscrowNote: events::EscrowNoteCreated,
     /// Nullify and emit an escrow-note spend. Appended to preserve existing discriminants.
     UseEscrowNote: events::EscrowNoteUsed,
+    /// Store a pending open escrow note. Appended to preserve existing discriminants.
+    CreateOpenEscrowNote: events::OpenEscrowNoteCreated,
+    /// Nullify and emit an open escrow note spend. Appended to preserve existing discriminants.
+    UseOpenEscrowNote: events::OpenEscrowNoteUsed,
 }

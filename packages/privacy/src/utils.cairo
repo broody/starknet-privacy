@@ -18,7 +18,7 @@ use privacy::hashes::{
 };
 use privacy::objects::{
     EncChannelInfo, EncOutgoingChannelInfo, EncPrivateKey, EncSubchannelInfo, EncUserAddr,
-    EscrowNoteContext, Note, OpenNoteDeposit,
+    EscrowNoteContext, EscrowNoteInvokeResult, Note, OpenNoteDeposit,
 };
 use privacy::snip12::compute_call_set_hash;
 use privacy::utils::constants::{
@@ -641,6 +641,16 @@ pub(crate) fn deserialize_invoke_return_data(
         .expect(errors::INVALID_ASSOCIATED_ADDRESSES);
     assert(return_data.is_empty(), errors::INVALID_INVOKE_RETURN_DATA);
     (deposits, Some(associated_addresses))
+}
+
+/// Deserializes the fixed return shape required from an escrow-note callback.
+pub(crate) fn deserialize_escrow_note_invoke_return_data(
+    mut return_data: Span<felt252>,
+) -> EscrowNoteInvokeResult {
+    let result: EscrowNoteInvokeResult = Serde::deserialize(ref return_data)
+        .expect(errors::INVALID_INVOKE_RETURN_DATA);
+    assert(return_data.is_empty(), errors::INVALID_INVOKE_RETURN_DATA);
+    result
 }
 
 /// Unifies `subject` with `reference`: binds it on the first application, and requires equality on

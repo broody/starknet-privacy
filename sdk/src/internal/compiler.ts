@@ -39,7 +39,7 @@ import type { BigNumberish } from "starknet";
 import { generateRandom, generateRandom120 } from "../utils/crypto.js";
 import { debugLog } from "../utils/logging.js";
 import { toHex } from "../utils/convert.js";
-import { compute_note_id } from "../utils/hashes.js";
+import { compute_note_id, compute_open_escrow_note_id } from "../utils/hashes.js";
 import { ReorgError } from "./errors.js";
 
 export type CompileResult = {
@@ -55,11 +55,13 @@ type ClientActions = {
   deposits: Extract<ClientAction, { type: "Deposit" }>[];
   useNotes: Extract<ClientAction, { type: "UseNote" }>[];
   useEscrowNotes: Extract<ClientAction, { type: "UseEscrowNote" }>[];
+  useOpenEscrowNotes: Extract<ClientAction, { type: "UseOpenEscrowNote" }>[];
   createNotes: (
     | Extract<ClientAction, { type: "CreateEncNote" }>
     | Extract<ClientAction, { type: "CreateOpenNote" }>
   )[];
   createEscrowNotes: Extract<ClientAction, { type: "CreateEscrowNote" }>[];
+  createOpenEscrowNotes: Extract<ClientAction, { type: "CreateOpenEscrowNote" }>[];
   withdraws: Extract<ClientAction, { type: "Withdraw" }>[];
   invoke?: Extract<ClientAction, { type: "InvokeExternal" }>;
   computeAndInvoke?: Extract<ClientAction, { type: "ComputeAndInvoke" }>;
@@ -236,8 +238,10 @@ export class ActionCompiler {
       deposits: [],
       useNotes: [],
       useEscrowNotes: [],
+      useOpenEscrowNotes: [],
       createNotes: [],
       createEscrowNotes: [],
+      createOpenEscrowNotes: [],
       withdraws: [],
       invoke: undefined,
       computeAndInvoke: undefined,
@@ -412,6 +416,25 @@ export class ActionCompiler {
       }
     }
 
+    if (actions.useOpenEscrowNotes) {
+      for (const action of actions.useOpenEscrowNotes) {
+        const noteId = toBigInt(action.noteId);
+        const secret = toBigInt(action.secret);
+        assert(noteId !== 0n, () => "Open escrow note ID must be non-zero");
+        assert(action.amount > 0n, () => "Open escrow note amount must be positive");
+        assert(secret !== 0n, () => "Open escrow note secret must be non-zero");
+        const input = {
+          type: "UseOpenEscrowNote",
+          input: {
+            note_id: noteId,
+            amount: action.amount,
+            secret,
+          },
+        } as const;
+        execute(input, clientActions.useOpenEscrowNotes);
+      }
+    }
+
     // 6. CreateEncNote/CreateOpenNote
     if (actions.createNotes) {
       for (const action of actions.createNotes) {
@@ -476,6 +499,28 @@ export class ActionCompiler {
       }
     }
 
+    if (actions.createOpenEscrowNotes) {
+      for (const action of actions.createOpenEscrowNotes) {
+        const contractAddress = toBigInt(action.contractAddress);
+        const policyCommitment = toBigInt(action.policyCommitment);
+        const secret = toBigInt(action.secret);
+        assert(contractAddress !== 0n, () => "Contract address must be non-zero");
+        assert(policyCommitment !== 0n, () => "Policy commitment must be non-zero");
+        assert(action.token !== 0n, () => "Open escrow note token must be non-zero");
+        assert(secret !== 0n, () => "Open escrow note secret must be non-zero");
+        const input = {
+          type: "CreateOpenEscrowNote",
+          input: {
+            contract_address: contractAddress,
+            policy_commitment: policyCommitment,
+            token: action.token,
+            secret,
+          },
+        } as const;
+        execute(input, clientActions.createOpenEscrowNotes);
+      }
+    }
+
     // 7. Withdraw
     if (actions.withdraws) {
       for (const action of actions.withdraws) {
@@ -494,15 +539,19 @@ export class ActionCompiler {
 
     // surpluses were handled in resolveNotes
 
-    const escrowContractTargets = new Set(
-      (actions.createEscrowNotes ?? []).map((note) => toBigInt(note.contractAddress))
-    );
+    const escrowContractTargets = new Set([
+      ...(actions.createEscrowNotes ?? []).map((note) => toBigInt(note.contractAddress)),
+      ...(actions.createOpenEscrowNotes ?? []).map((note) => toBigInt(note.contractAddress)),
+    ]);
     assert(
       escrowContractTargets.size <= 1,
       () => "A transaction may target only one escrow application contract"
     );
     const hasEscrowNoteActions =
-      (actions.useEscrowNotes?.length ?? 0) > 0 || (actions.createEscrowNotes?.length ?? 0) > 0;
+      (actions.useEscrowNotes?.length ?? 0) > 0 ||
+      (actions.useOpenEscrowNotes?.length ?? 0) > 0 ||
+      (actions.createEscrowNotes?.length ?? 0) > 0 ||
+      (actions.createOpenEscrowNotes?.length ?? 0) > 0;
     assert(
       !hasEscrowNoteActions ||
         actions.invoke !== undefined ||
@@ -573,8 +622,8 @@ export class ActionCompiler {
       .flat();
   }
 
-  // Shared arguments for `invoke` / `computeAndInvoke` call builders: the open notes created
-  // in this batch (so the callee can deposit into them) and the withdrawals it can consume.
+  // Shared arguments for `invoke` / `computeAndInvoke` call builders: callback-funded notes
+  // created in this batch (so the callee can deposit into them) and consumable withdrawals.
   private invokeBuilderArgs(
     clientActions: ClientActions,
     pool: PoolSimulator
@@ -590,12 +639,24 @@ export class ActionCompiler {
         },
       ];
     });
+    const openEscrowNotes = clientActions.createOpenEscrowNotes.map((note) => ({
+      noteId: compute_open_escrow_note_id(
+        this.userAddress,
+        note.input.contract_address,
+        note.input.policy_commitment,
+        note.input.token,
+        note.input.secret
+      ),
+      token: note.input.token,
+      contractAddress: note.input.contract_address,
+      policyCommitment: note.input.policy_commitment,
+    }));
     const withdrawals = clientActions.withdraws.map((withdraw) => ({
       recipient: withdraw.input.to_addr,
       token: withdraw.input.token,
       amount: withdraw.input.amount,
     }));
-    return { openNotes, withdrawals, poolAddress: this.poolAddress };
+    return { openNotes, openEscrowNotes, withdrawals, poolAddress: this.poolAddress };
   }
 
   /**
@@ -717,6 +778,13 @@ export class ActionCompiler {
       }
     }
 
+    if (actions.useOpenEscrowNotes) {
+      for (const note of actions.useOpenEscrowNotes) {
+        assert(note.amount > 0n, () => `Open escrow note ${note.noteId}: amount must be positive`);
+        update(note.token, note.amount);
+      }
+    }
+
     // Outputs: Withdraws
     if (actions.withdraws) {
       for (const w of actions.withdraws) {
@@ -744,6 +812,7 @@ export class ActionCompiler {
         update(note.token, -note.amount);
       }
     }
+    // Open escrow notes are funded by the application callback, not the private balance.
 
     const notesDiscoveryLevel = options?.autoDiscover?.notes;
     // discover notes if requested

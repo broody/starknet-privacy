@@ -137,6 +137,54 @@ pub struct EscrowNoteUsed {
     /// Token released into the private transaction's conservation balance.
     pub token: ContractAddress,
 }
+
+#[derive(Serde, Copy, Debug, Drop, PartialEq, starknet::Event)]
+pub struct OpenEscrowNoteCreated {
+    /// The pending note ID.
+    #[key]
+    pub note_id: felt252,
+    /// The application contract that must fund and govern the note.
+    #[key]
+    pub contract_address: ContractAddress,
+    /// The application-specific policy commitment.
+    #[key]
+    pub policy_commitment: felt252,
+    /// Public token of the pending note.
+    pub token: ContractAddress,
+    /// Commitment to the private secret required to spend the funded note.
+    pub opening_commitment: felt252,
+}
+
+#[derive(Serde, Copy, Debug, Drop, PartialEq, starknet::Event)]
+pub struct OpenEscrowNoteDeposited {
+    /// The funded note ID.
+    #[key]
+    pub note_id: felt252,
+    /// The bound application contract that funded the note.
+    #[key]
+    pub contract_address: ContractAddress,
+    /// Public token deposited into the pool.
+    pub token: ContractAddress,
+    /// Public amount deposited into the note.
+    pub amount: u128,
+}
+
+#[derive(Serde, Copy, Debug, Drop, PartialEq, starknet::Event)]
+pub struct OpenEscrowNoteUsed {
+    /// Secret-derived nullifier. This does not reveal the note ID.
+    #[key]
+    pub nullifier: felt252,
+    /// The application contract that authorized the spend.
+    #[key]
+    pub contract_address: ContractAddress,
+    /// Application-specific policy commitment bound at creation.
+    #[key]
+    pub policy_commitment: felt252,
+    /// Public token released into the private transaction's conservation balance.
+    pub token: ContractAddress,
+    /// Public amount released into the private transaction's conservation balance.
+    pub amount: u128,
+}
 #[derive(Serde, Copy, Debug, Drop, PartialEq, starknet::Event)]
 pub struct FeeAmountSet {
     /// The fee amount in FRI per `apply_actions` call.

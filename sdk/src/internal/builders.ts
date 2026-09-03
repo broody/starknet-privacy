@@ -5,6 +5,7 @@
 import {
   type CreateNoteAction,
   type CreateEscrowNoteAction,
+  type CreateOpenEscrowNoteAction,
   type DepositAction,
   type ExecuteOptions,
   type ExecuteResult,
@@ -20,6 +21,7 @@ import {
   type TokenOperationsBuilder,
   type UseNoteAction,
   type UseEscrowNoteAction,
+  type UseOpenEscrowNoteAction,
   type WithdrawAction,
   type WithdrawOutput,
   type DepositInput,
@@ -34,6 +36,8 @@ import {
   type ShadowAccountsBuilder,
   type EscrowNoteCreation,
   type EscrowNoteSpend,
+  type OpenEscrowNoteCreation,
+  type OpenEscrowNoteSpend,
   type ViewingKey,
   Open,
   PrivateTransfersInterface,
@@ -51,9 +55,11 @@ export class TokenOperationsBuilderImpl implements TokenOperationsBuilder {
   public openTokenChannels: OpenTokenChannelAction[] = [];
   public useNotes: UseNoteAction[] = [];
   public useEscrowNotes: UseEscrowNoteAction[] = [];
+  public useOpenEscrowNotes: UseOpenEscrowNoteAction[] = [];
   public deposits: DepositAction[] = [];
   public createNotes: CreateNoteAction[] = [];
   public createEscrowNotes: CreateEscrowNoteAction[] = [];
+  public createOpenEscrowNotes: CreateOpenEscrowNoteAction[] = [];
   public withdraws: WithdrawAction[] = [];
   // Surplus recipient (overrides parent builder's surplus recipient for this token)
   public surplusAction?: SurplusAction;
@@ -84,6 +90,18 @@ export class TokenOperationsBuilderImpl implements TokenOperationsBuilder {
   useEscrowNote(...notes: EscrowNoteSpend[]): this {
     for (const note of notes) {
       this.useEscrowNotes.push({
+        token: this.token,
+        noteId: note.noteId,
+        amount: note.amount,
+        secret: note.secret,
+      });
+    }
+    return this;
+  }
+
+  useOpenEscrowNote(...notes: OpenEscrowNoteSpend[]): this {
+    for (const note of notes) {
+      this.useOpenEscrowNotes.push({
         token: this.token,
         noteId: note.noteId,
         amount: note.amount,
@@ -146,6 +164,18 @@ export class TokenOperationsBuilderImpl implements TokenOperationsBuilder {
         contractAddress: output.contractAddress,
         policyCommitment: output.policyCommitment,
         amount: output.amount,
+        secret: output.secret,
+      });
+    }
+    return this;
+  }
+
+  createOpenEscrowNote(...outputs: OpenEscrowNoteCreation[]): this {
+    for (const output of outputs) {
+      this.createOpenEscrowNotes.push({
+        token: this.token,
+        contractAddress: output.contractAddress,
+        policyCommitment: output.policyCommitment,
         secret: output.secret,
       });
     }
@@ -306,8 +336,10 @@ export class PrivateTransfersBuilderImpl implements PrivateTransfersBuilder {
     const deposits: DepositAction[] = [];
     const useNotes: UseNoteAction[] = [];
     const useEscrowNotes: UseEscrowNoteAction[] = [];
+    const useOpenEscrowNotes: UseOpenEscrowNoteAction[] = [];
     const createNotes: CreateNoteAction[] = [];
     const createEscrowNotes: CreateEscrowNoteAction[] = [];
+    const createOpenEscrowNotes: CreateOpenEscrowNoteAction[] = [];
     const withdraws: WithdrawAction[] = [];
     const surpluses: SurplusAction[] = [];
 
@@ -320,8 +352,10 @@ export class PrivateTransfersBuilderImpl implements PrivateTransfersBuilder {
       deposits.push(...tokenBuilder.deposits);
       useNotes.push(...tokenBuilder.useNotes);
       useEscrowNotes.push(...tokenBuilder.useEscrowNotes);
+      useOpenEscrowNotes.push(...tokenBuilder.useOpenEscrowNotes);
       createNotes.push(...tokenBuilder.createNotes);
       createEscrowNotes.push(...tokenBuilder.createEscrowNotes);
+      createOpenEscrowNotes.push(...tokenBuilder.createOpenEscrowNotes);
       withdraws.push(...tokenBuilder.withdraws);
 
       const surplusToAction = tokenBuilder.surplusAction ?? this.defaultSurplusAction;
@@ -337,8 +371,10 @@ export class PrivateTransfersBuilderImpl implements PrivateTransfersBuilder {
       deposits,
       useNotes,
       useEscrowNotes,
+      useOpenEscrowNotes,
       createNotes,
       createEscrowNotes,
+      createOpenEscrowNotes,
       withdraws,
       surpluses,
       invoke: this.invokeExternal,

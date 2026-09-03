@@ -8,23 +8,24 @@ pub mod Privacy {
     use openzeppelin::security::ReentrancyGuardComponent;
     use privacy::actions::{
         AppendInput, ClientAction, ClientActionTrait, ComputeAndInvokeInput, CreateEncNoteInput,
-        CreateEscrowNoteInput, CreateOpenNoteInput, DepositInput, InputValidation,
-        InvokeExternalInput, InvokeInput, OpenChannelInput, OpenSubchannelInput, ServerAction,
-        SetViewingKeyInput, TransferFromInput, TransferToInput, UseEscrowNoteInput, UseNoteInput,
-        WithdrawInput, WriteOnceInput,
+        CreateEscrowNoteInput, CreateOpenEscrowNoteInput, CreateOpenNoteInput, DepositInput,
+        InputValidation, InvokeExternalInput, InvokeInput, OpenChannelInput, OpenSubchannelInput,
+        ServerAction, SetViewingKeyInput, TransferFromInput, TransferToInput, UseEscrowNoteInput,
+        UseNoteInput, UseOpenEscrowNoteInput, WithdrawInput, WriteOnceInput,
     };
     use privacy::errors::internal_errors;
     use privacy::hashes::{
         compute_channel_key, compute_channel_marker, compute_escrow_note_commitment,
         compute_escrow_note_id, compute_escrow_note_nullifier, compute_identity_key,
-        compute_note_id, compute_nullifier, compute_outgoing_channel_id, compute_subchannel_id,
-        compute_subchannel_marker,
+        compute_note_id, compute_nullifier, compute_open_escrow_note_id,
+        compute_open_escrow_note_nullifier, compute_open_escrow_note_opening_commitment,
+        compute_outgoing_channel_id, compute_subchannel_id, compute_subchannel_marker,
     };
     use privacy::interface::{IAdmin, IClient, IServer, IViews};
     use privacy::objects::{
         EncChannelInfo, EncOutgoingChannelInfo, EncPrivateKey, EncSubchannelInfo, EscrowNote,
-        EscrowNoteContext, Note, OpenNoteDeposit, OpenNoteScreeningPolicy, TokenBalances,
-        TokenBalancesTrait,
+        EscrowNoteContext, Note, OpenEscrowNote, OpenEscrowNoteDeposit, OpenNoteDeposit,
+        OpenNoteScreeningPolicy, TokenBalances, TokenBalancesTrait,
     };
     use privacy::snip12::{ScreeningAttestation, is_screening_attestation_valid};
     use privacy::utils::constants::{
@@ -35,7 +36,8 @@ pub mod Privacy {
     };
     use privacy::utils::{
         ProofFacts, assert_valid_os_call, assert_valid_signature, compute_escrow_note_actions_hash,
-        compute_message_hash, decode_note_amount, derive_public_key, deserialize_invoke_return_data,
+        compute_message_hash, decode_note_amount, derive_public_key,
+        deserialize_escrow_note_invoke_return_data, deserialize_invoke_return_data,
         enc_note_packed_value, encrypt_channel_info, encrypt_outgoing_channel_info,
         encrypt_private_key, encrypt_subchannel_info, encrypt_user_addr,
         extract_compile_actions_inputs, extract_server_actions_from_panic, is_canonical_key,
@@ -126,6 +128,9 @@ pub mod Privacy {
         /// Nullifiers for escrow notes consumed through an authorized callback.
         /// Appended to preserve the deployed storage layout.
         escrow_note_nullifiers: Map<felt252, bool>,
+        /// Publicly valued escrow notes, initially pending until funded by their bound contract.
+        /// Appended to preserve the deployed storage layout.
+        open_escrow_notes: Map<felt252, OpenEscrowNote>,
     }
 
     #[event]
@@ -155,6 +160,9 @@ pub mod Privacy {
         NoteUsed: events::NoteUsed,
         EscrowNoteCreated: events::EscrowNoteCreated,
         EscrowNoteUsed: events::EscrowNoteUsed,
+        OpenEscrowNoteCreated: events::OpenEscrowNoteCreated,
+        OpenEscrowNoteDeposited: events::OpenEscrowNoteDeposited,
+        OpenEscrowNoteUsed: events::OpenEscrowNoteUsed,
         FeeAmountSet: events::FeeAmountSet,
         FeeCollectorSet: events::FeeCollectorSet,
         ProofValidityBlocksSet: events::ProofValidityBlocksSet,
@@ -304,6 +312,8 @@ pub mod Privacy {
                         ),
                     ClientAction::CreateEscrowNote(input) => self
                         .create_escrow_note(sender_addr: user_addr, :input, ref :token_balances),
+                    ClientAction::CreateOpenEscrowNote(input) => self
+                        .create_open_escrow_note(sender_addr: user_addr, :input),
                     ClientAction::UseNote(input) => self
                         .use_note(
                             owner_addr: user_addr,
@@ -313,6 +323,8 @@ pub mod Privacy {
                         ),
                     ClientAction::UseEscrowNote(input) => self
                         .use_escrow_note(:input, ref :token_balances),
+                    ClientAction::UseOpenEscrowNote(input) => self
+                        .use_open_escrow_note(:input, ref :token_balances),
                     ClientAction::Withdraw(input) => self
                         .withdraw(:user_addr, :input, ref :token_balances),
                     ClientAction::InvokeExternal(input) => self.invoke_external(:input),
@@ -797,6 +809,70 @@ pub mod Privacy {
             ]
         }
 
+        /// Returns the server action to create a pending open escrow note. Its bound application
+        /// contract must fund it through the escrow callback in the same transaction.
+        fn create_open_escrow_note(
+            self: @ContractState, sender_addr: ContractAddress, input: CreateOpenEscrowNoteInput,
+        ) -> Array<ServerAction> {
+            input.assert_valid();
+            let CreateOpenEscrowNoteInput {
+                contract_address, policy_commitment, token, secret,
+            } = input;
+            let note_id = compute_open_escrow_note_id(
+                :sender_addr, :contract_address, :policy_commitment, :token, :secret,
+            );
+            let opening_commitment = compute_open_escrow_note_opening_commitment(
+                :note_id, :contract_address, :policy_commitment, :token, :secret,
+            );
+            assert(opening_commitment.is_non_zero(), internal_errors::ZERO_NOTE_VALUE);
+
+            array![
+                ServerAction::CreateOpenEscrowNote(
+                    events::OpenEscrowNoteCreated {
+                        note_id, contract_address, policy_commitment, token, opening_commitment,
+                    },
+                ),
+            ]
+        }
+
+        /// Returns the server action to consume a funded open escrow note.
+        fn use_open_escrow_note(
+            self: @ContractState, input: UseOpenEscrowNoteInput, ref token_balances: TokenBalances,
+        ) -> Array<ServerAction> {
+            input.assert_valid();
+            let UseOpenEscrowNoteInput { note_id, amount, secret } = input;
+            let note = self.open_escrow_notes.read(note_id);
+            assert(note.opening_commitment.is_non_zero(), errors::OPEN_ESCROW_NOTE_NOT_FOUND);
+            assert(note.amount.is_non_zero(), errors::OPEN_ESCROW_NOTE_NOT_FUNDED);
+            assert(note.amount == amount, errors::INVALID_OPEN_ESCROW_NOTE_OPENING);
+            let expected_opening_commitment = compute_open_escrow_note_opening_commitment(
+                :note_id,
+                contract_address: note.contract_address,
+                policy_commitment: note.policy_commitment,
+                token: note.token,
+                :secret,
+            );
+            assert(
+                expected_opening_commitment == note.opening_commitment,
+                errors::INVALID_OPEN_ESCROW_NOTE_OPENING,
+            );
+            let nullifier = compute_open_escrow_note_nullifier(:note_id, :secret);
+
+            token_balances.add_balance(token: note.token, amount: note.amount);
+
+            array![
+                ServerAction::UseOpenEscrowNote(
+                    events::OpenEscrowNoteUsed {
+                        nullifier,
+                        contract_address: note.contract_address,
+                        policy_commitment: note.policy_commitment,
+                        token: note.token,
+                        amount: note.amount,
+                    },
+                ),
+            ]
+        }
+
 
         /// Validates preconditions and computes values needed for creating a note.
         /// Returns `(channel_key, storage_address, note_id)`.
@@ -865,6 +941,14 @@ pub mod Privacy {
                     },
                     ServerAction::UseEscrowNote(event) => {
                         self._apply_escrow_note_used(:event);
+                        has_replay_protection = true;
+                    },
+                    ServerAction::CreateOpenEscrowNote(event) => {
+                        self._apply_open_escrow_note_created(:event);
+                        has_replay_protection = true;
+                    },
+                    ServerAction::UseOpenEscrowNote(event) => {
+                        self._apply_open_escrow_note_used(:event);
                         has_replay_protection = true;
                     },
                 }
@@ -970,6 +1054,7 @@ pub mod Privacy {
                 serialized_actions: serialized_actions.span(),
             };
             let mut undeposited_open_notes: usize = Zero::zero();
+            let mut undeposited_open_escrow_notes: usize = Zero::zero();
             let mut screening_subject: Option<ContractAddress> = None;
             let mut escrow_note_callback_applied = false;
             for action in actions {
@@ -997,6 +1082,7 @@ pub mod Privacy {
                                 :selector,
                                 :context,
                                 ref :undeposited_open_notes,
+                                ref :undeposited_open_escrow_notes,
                                 ref :screening_subject,
                             );
                     },
@@ -1016,6 +1102,7 @@ pub mod Privacy {
                                 :selector,
                                 :context,
                                 ref :undeposited_open_notes,
+                                ref :undeposited_open_escrow_notes,
                                 ref :screening_subject,
                             );
                     },
@@ -1036,9 +1123,22 @@ pub mod Privacy {
                         self._apply_escrow_note_used(:event);
                         self.emit(event);
                     },
+                    ServerAction::CreateOpenEscrowNote(event) => {
+                        self._apply_open_escrow_note_created(:event);
+                        self.emit(event);
+                        undeposited_open_escrow_notes += 1;
+                    },
+                    ServerAction::UseOpenEscrowNote(event) => {
+                        self._apply_open_escrow_note_used(:event);
+                        self.emit(event);
+                    },
                 };
             }
             assert(undeposited_open_notes == Zero::zero(), errors::UNDEPOSITED_OPEN_NOTES);
+            assert(
+                undeposited_open_escrow_notes == Zero::zero(),
+                errors::UNDEPOSITED_OPEN_ESCROW_NOTES,
+            );
             assert(
                 contract_address.is_none() || escrow_note_callback_applied,
                 errors::ESCROW_NOTE_CALLBACK_REQUIRED,
@@ -1059,6 +1159,18 @@ pub mod Privacy {
                             );
                     },
                     ServerAction::UseEscrowNote(event) => {
+                        self
+                            ._unify_escrow_target(
+                                ref :contract_address, reference_address: event.contract_address,
+                            );
+                    },
+                    ServerAction::CreateOpenEscrowNote(event) => {
+                        self
+                            ._unify_escrow_target(
+                                ref :contract_address, reference_address: event.contract_address,
+                            );
+                    },
+                    ServerAction::UseOpenEscrowNote(event) => {
                         self
                             ._unify_escrow_target(
                                 ref :contract_address, reference_address: event.contract_address,
@@ -1179,6 +1291,42 @@ pub mod Privacy {
             nullifier_entry.write(true);
         }
 
+        fn _apply_open_escrow_note_created(
+            ref self: ContractState, event: events::OpenEscrowNoteCreated,
+        ) {
+            let events::OpenEscrowNoteCreated {
+                note_id, contract_address, policy_commitment, token, opening_commitment,
+            } = event;
+            assert(
+                self.open_escrow_notes.read(note_id).opening_commitment.is_zero(),
+                errors::NON_ZERO_VALUE,
+            );
+            self
+                .open_escrow_notes
+                .entry(note_id)
+                .write(
+                    OpenEscrowNote {
+                        opening_commitment, amount: 0, contract_address, policy_commitment, token,
+                    },
+                );
+        }
+
+        fn _apply_open_escrow_note_used(
+            ref self: ContractState, event: events::OpenEscrowNoteUsed,
+        ) {
+            let events::OpenEscrowNoteUsed {
+                nullifier, contract_address, policy_commitment, token, amount,
+            } = event;
+            assert(nullifier.is_non_zero(), errors::ZERO_NOTE_ID);
+            assert(contract_address.is_non_zero(), errors::ZERO_CONTRACT_ADDRESS);
+            assert(policy_commitment.is_non_zero(), errors::ZERO_POLICY_COMMITMENT);
+            assert(token.is_non_zero(), errors::ZERO_TOKEN);
+            assert(amount.is_non_zero(), errors::ZERO_AMOUNT);
+            let nullifier_entry = self.escrow_note_nullifiers.entry(nullifier);
+            assert(!nullifier_entry.read(), errors::NON_ZERO_VALUE);
+            nullifier_entry.write(true);
+        }
+
         fn _apply_append(ref self: ContractState, input: AppendInput) {
             let AppendInput { recipient_addr, enc_channel_info } = input;
             self.recipient_channels.entry(recipient_addr).push(enc_channel_info);
@@ -1213,9 +1361,11 @@ pub mod Privacy {
             selector: felt252,
             context: Option<EscrowNoteContext>,
             ref undeposited_open_notes: usize,
+            ref undeposited_open_escrow_notes: usize,
             ref screening_subject: Option<ContractAddress>,
         ) {
             let InvokeInput { contract_address, calldata } = input;
+            let is_escrow_callback = context.is_some();
             let mut effective_calldata = array![];
             if let Some(escrow_note_context) = context {
                 escrow_note_context.serialize(ref effective_calldata);
@@ -1229,14 +1379,53 @@ pub mod Privacy {
                 .unwrap_syscall();
             self.emit(events::ExternalContractInvoked { contract_address, selector });
 
-            let (deposits, associated_addresses) = deserialize_invoke_return_data(return_data);
+            if is_escrow_callback {
+                let result = deserialize_escrow_note_invoke_return_data(return_data);
+                self
+                    ._apply_callback_deposits(
+                        depositor: contract_address,
+                        deposits: result.open_note_deposits,
+                        open_escrow_deposits: result.open_escrow_note_deposits,
+                        associated_addresses: Some(result.associated_addresses),
+                        :selector,
+                        ref :undeposited_open_notes,
+                        ref :undeposited_open_escrow_notes,
+                        ref :screening_subject,
+                    );
+            } else {
+                let (deposits, associated_addresses) = deserialize_invoke_return_data(return_data);
+                let open_escrow_deposits: Array<OpenEscrowNoteDeposit> = array![];
+                self
+                    ._apply_callback_deposits(
+                        depositor: contract_address,
+                        :deposits,
+                        open_escrow_deposits: open_escrow_deposits.span(),
+                        :associated_addresses,
+                        :selector,
+                        ref :undeposited_open_notes,
+                        ref :undeposited_open_escrow_notes,
+                        ref :screening_subject,
+                    );
+            }
+        }
 
-            // Apply deposits to open notes returned by Invoke. `contract_address` is the depositor.
+        /// Applies regular and escrow open-note deposits returned from an application callback.
+        fn _apply_callback_deposits(
+            ref self: ContractState,
+            depositor: ContractAddress,
+            deposits: Span<OpenNoteDeposit>,
+            open_escrow_deposits: Span<OpenEscrowNoteDeposit>,
+            associated_addresses: Option<Span<ContractAddress>>,
+            selector: felt252,
+            ref undeposited_open_notes: usize,
+            ref undeposited_open_escrow_notes: usize,
+            ref screening_subject: Option<ContractAddress>,
+        ) {
             // Screening, if required, has its subject defined by the depositor's screening policy.
-            if !deposits.is_empty() {
-                match self.open_note_depositor_screening_policies.read(contract_address) {
+            if !deposits.is_empty() || !open_escrow_deposits.is_empty() {
+                match self.open_note_depositor_screening_policies.read(depositor) {
                     OpenNoteScreeningPolicy::Required => unify_address(
-                        ref screening_subject, reference: contract_address,
+                        ref screening_subject, reference: depositor,
                     ),
                     OpenNoteScreeningPolicy::Exempt => {},
                     OpenNoteScreeningPolicy::Delegated => {
@@ -1255,12 +1444,48 @@ pub mod Privacy {
                     },
                 }
                 for deposit in deposits {
-                    self._deposit_to_open_note(depositor: contract_address, deposit: *deposit);
+                    self._deposit_to_open_note(:depositor, deposit: *deposit);
                 }
                 undeposited_open_notes = undeposited_open_notes
                     .checked_sub(deposits.len())
                     .expect(internal_errors::TOO_MANY_OPEN_NOTES_DEPOSITED);
+                for deposit in open_escrow_deposits {
+                    self._deposit_to_open_escrow_note(:depositor, deposit: *deposit);
+                }
+                undeposited_open_escrow_notes = undeposited_open_escrow_notes
+                    .checked_sub(open_escrow_deposits.len())
+                    .expect(internal_errors::TOO_MANY_OPEN_ESCROWS_DEPOSITED);
             }
+        }
+
+        /// Funds a pending open escrow note from its bound application contract.
+        fn _deposit_to_open_escrow_note(
+            ref self: ContractState, depositor: ContractAddress, deposit: OpenEscrowNoteDeposit,
+        ) {
+            let OpenEscrowNoteDeposit { note_id, amount } = deposit;
+            assert(note_id.is_non_zero(), errors::ZERO_NOTE_ID);
+            assert(amount.is_non_zero(), errors::ZERO_AMOUNT);
+
+            let note_entry = self.open_escrow_notes.entry(note_id);
+            let mut note = note_entry.read();
+            assert(note.opening_commitment.is_non_zero(), errors::OPEN_ESCROW_NOTE_NOT_FOUND);
+            assert(note.contract_address == depositor, errors::OPEN_ESCROW_NOTE_TARGET_MISMATCH);
+            assert(note.amount.is_zero(), errors::OPEN_ESCROW_NOTE_ALREADY_FUNDED);
+            note.amount = amount;
+            note_entry.write(note);
+
+            checked_transfer_from(
+                token_address: note.token,
+                sender: depositor,
+                recipient: get_contract_address(),
+                amount: amount.into(),
+            );
+            self
+                .emit(
+                    events::OpenEscrowNoteDeposited {
+                        note_id, contract_address: note.contract_address, token: note.token, amount,
+                    },
+                );
         }
 
         /// Applies a single deposit to an open note. Used when applying the span returned by an
@@ -1334,6 +1559,10 @@ pub mod Privacy {
 
         fn get_escrow_note(self: @ContractState, note_id: felt252) -> EscrowNote {
             self.escrow_notes.read(note_id)
+        }
+
+        fn get_open_escrow_note(self: @ContractState, note_id: felt252) -> OpenEscrowNote {
+            self.open_escrow_notes.read(note_id)
         }
 
         fn nullifier_exists(self: @ContractState, nullifier: felt252) -> bool {

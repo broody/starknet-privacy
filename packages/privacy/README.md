@@ -34,20 +34,27 @@ Actions must be ordered by phase. Actions within the same phase can appear in an
 | 3 | `Deposit` | Deposit tokens into contract |
 | 4 | `UseNote` | Spend a recipient note (creates nullifier) |
 | 4 | `UseEscrowNote` | Privately open an escrow note (requires escrow-note callback) |
+| 4 | `UseOpenEscrowNote` | Spend a publicly valued escrow note (requires escrow-note callback) |
 | 5 | `CreateEncNote` | Create encrypted note |
 | 5 | `CreateOpenNote` | Create open (unencrypted) note |
-| 5 | `CreateEscrowNote` | Create an escrow note (requires escrow-note callback) |
+| 5 | `CreateEscrowNote` | Create a private-value escrow note (requires escrow-note callback) |
+| 5 | `CreateOpenEscrowNote` | Create a callback-funded public-value escrow note |
 | 6 | `Withdraw` | Withdraw tokens |
 | 7 | `InvokeExternal` | Call external contract (at most once per tx) |
 | 7 | `ComputeAndInvoke` | Compute privately, then call an external contract (at most once per tx) |
 
 ## Escrow notes
 
-Escrow notes hold a private amount under an application contract's policy. A single private random
-`secret` domain-separately derives the note-ID nonce and amount blinding. A spend proves the opening
-privately and emits only a secret-derived nullifier; the pool does not generically reveal which
-creation was consumed. Application-level `policy_commitment` values may still be linkable if the
-application makes them unique or public.
+Escrow notes are contract-governed notes with two explicit value modes:
+
+- `EscrowNote` commits to a private amount supplied from the private transaction balance. Its
+  `secret` domain-separately derives the note-ID nonce and amount blinding.
+- `OpenEscrowNote` stores a public amount supplied by the application callback. It is created
+  pending with amount zero and must be funded exactly once in the same transaction.
+
+Both modes require knowledge of a private secret to spend and emit a secret-derived nullifier. The
+pool does not generically reveal which creation a spend consumed, although public amounts and
+application-level `policy_commitment` values can make open escrow notes linkable.
 
 Every transaction that creates or spends escrow notes must contain exactly one invoke-phase
 action targeting their application contract. The pool changes the selector to
@@ -68,8 +75,20 @@ contracts must:
 - validate the application-specific `policy_commitment` in the serialized actions;
 - call `validate_escrow_note_context` to authenticate and deserialize `serialized_actions`,
   enforce the permitted asset disposition, and bind any stored authorization to `actions_hash`; and
-- return a correctly serialized `Span<OpenNoteDeposit>` (empty when it creates no open-note
-  deposits).
+- return exactly one serialized `EscrowNoteInvokeResult`:
+
+```cairo
+pub struct EscrowNoteInvokeResult {
+    open_note_deposits: Span<OpenNoteDeposit>,
+    open_escrow_note_deposits: Span<OpenEscrowNoteDeposit>,
+    associated_addresses: Span<ContractAddress>,
+}
+```
+
+For every `CreateOpenEscrowNote`, the bound contract must return one matching
+`OpenEscrowNoteDeposit` and approve the pool to transfer the public amount. Missing, duplicate, or
+wrong-contract funding reverts the complete transaction. Regular callbacks retain their existing
+return ABI.
 
 Only one application contract may appear in a transaction. Escrow notes remain bound to its
 address across upgrades. Applications own their upgrade policy and must preserve the callback ABI
@@ -127,6 +146,9 @@ application state.
 | `NoteUsed` | `UseNote` action |
 | `EscrowNoteCreated` | `CreateEscrowNote` action after escrow-note authorization |
 | `EscrowNoteUsed` | `UseEscrowNote` action after escrow-note authorization |
+| `OpenEscrowNoteCreated` | `CreateOpenEscrowNote` action after escrow-note authorization |
+| `OpenEscrowNoteDeposited` | Escrow callback funding an `OpenEscrowNote` |
+| `OpenEscrowNoteUsed` | `UseOpenEscrowNote` action after escrow-note authorization |
 | `OpenNoteCreated` | `CreateOpenNote` action |
 | `OpenNoteDeposited` | `deposit_to_open_note()` |
 | `AuditorPublicKeySet` | `set_auditor_public_key()` |

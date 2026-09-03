@@ -27,6 +27,10 @@ const ESCROW_NOTE_NONCE_TAG = "ESCROW_NOTE_NONCE_TAG:V1";
 const ESCROW_NOTE_BLINDING_TAG = "ESCROW_NOTE_BLINDING_TAG:V1";
 const ESCROW_NOTE_COMMIT_TAG = "ESCROW_NOTE_COMMIT_TAG:V1";
 const ESCROW_NOTE_NULLIFIER_TAG = "ESCROW_NOTE_NULLIFIER_TAG:V1";
+const OPEN_ESCROW_NOTE_ID_TAG = "OPEN_ESCROW_ID_TAG:V1";
+const OPEN_ESCROW_NOTE_NONCE_TAG = "OPEN_ESCROW_NONCE_TAG:V1";
+const OPEN_ESCROW_NOTE_COMMIT_TAG = "OPEN_ESCROW_COMMIT_TAG:V1";
+const OPEN_ESCROW_NOTE_NULLIFIER_TAG = "OPEN_ESCROW_NULLIFIER_TAG:V1";
 
 /** See packages/privacy/src/hashes.cairo for documentation. */
 export function compute_identity_key(user_addr: bigint, user_private_key: bigint, contract_address: bigint): bigint {
@@ -126,4 +130,24 @@ export function compute_escrow_note_commitment(note_id: bigint, contract_address
 /** See packages/privacy/src/hashes.cairo for documentation. */
 export function compute_escrow_note_nullifier(note_id: bigint, secret: bigint): bigint {
   return hash(ESCROW_NOTE_NULLIFIER_TAG, note_id, derive_escrow_note_blinding(secret));
+}
+
+/** See packages/privacy/src/hashes.cairo for documentation. */
+export function derive_open_escrow_note_nonce(secret: bigint): bigint {
+  return hash(OPEN_ESCROW_NOTE_NONCE_TAG, secret);
+}
+
+/** See packages/privacy/src/hashes.cairo for documentation. */
+export function compute_open_escrow_note_id(sender_addr: bigint, contract_address: bigint, policy_commitment: bigint, token: bigint, secret: bigint): bigint {
+  return hash(OPEN_ESCROW_NOTE_ID_TAG, sender_addr, contract_address, policy_commitment, token, derive_open_escrow_note_nonce(secret));
+}
+
+/** See packages/privacy/src/hashes.cairo for documentation. */
+export function compute_open_escrow_note_opening_commitment(note_id: bigint, contract_address: bigint, policy_commitment: bigint, token: bigint, secret: bigint): bigint {
+  return hash(OPEN_ESCROW_NOTE_COMMIT_TAG, note_id, contract_address, policy_commitment, token, secret);
+}
+
+/** See packages/privacy/src/hashes.cairo for documentation. */
+export function compute_open_escrow_note_nullifier(note_id: bigint, secret: bigint): bigint {
+  return hash(OPEN_ESCROW_NOTE_NULLIFIER_TAG, note_id, secret);
 }

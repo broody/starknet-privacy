@@ -32,7 +32,8 @@ use privacy::interface::{
 };
 use privacy::objects::{
     EncChannelInfo, EncOutgoingChannelInfo, EncPrivateKey, EncSubchannelInfo, EncUserAddr,
-    EscrowNote, Note, OpenNoteDeposit, OpenNoteScreeningPolicy, TokenBalances, TokenBalancesTrait,
+    EscrowNote, Note, OpenEscrowNote, OpenNoteDeposit, OpenNoteScreeningPolicy, TokenBalances,
+    TokenBalancesTrait,
 };
 use privacy::privacy::Privacy;
 use privacy::privacy::Privacy::{ClientInternalTrait, deploy_for_test as deploy_privacy_for_test};
@@ -1788,10 +1789,10 @@ pub(crate) impl PrivacyCfgImpl of PrivacyCfgTrait {
     }
 
     /// The address `actions` require screening for, mirroring the pool's collection: a deposit
-    /// requires its `from_addr`, and open notes created in the tx must be funded by an Invoke in
-    /// that same tx (`UNDEPOSITED_OPEN_NOTES`), so that Invoke's target is the subject unless its
-    /// policy exempts or delegates it. The deposit takes precedence so that a conflicting pair
-    /// still reaches the pool's `MULTIPLE_SCREENING_SUBJECTS`.
+    /// requires its `from_addr`, and callback-funded notes created in the tx must be funded by an
+    /// Invoke in that same tx, so that Invoke's target is the subject unless its policy exempts or
+    /// delegates it. The deposit takes precedence so that a conflicting pair still reaches the
+    /// pool's `MULTIPLE_SCREENING_SUBJECTS`.
     fn _screening_subject_of(
         self: @PrivacyCfg, actions: Span<ServerAction>,
     ) -> Option<ContractAddress> {
@@ -2136,6 +2137,10 @@ pub(crate) impl PrivacyCfgImpl of PrivacyCfgTrait {
         self.views.get_escrow_note(:note_id)
     }
 
+    fn get_open_escrow_note(self: @PrivacyCfg, note_id: felt252) -> OpenEscrowNote {
+        self.views.get_open_escrow_note(:note_id)
+    }
+
     fn escrow_note_nullifier_exists(self: @PrivacyCfg, nullifier: felt252) -> bool {
         self.views.escrow_note_nullifier_exists(:nullifier)
     }
@@ -2281,14 +2286,18 @@ fn deposit_depositor_of(actions: Span<ServerAction>) -> Option<ContractAddress> 
     depositor
 }
 
-/// Whether `actions` create open notes, which the pool requires to be funded by an Invoke in the
-/// same tx (`UNDEPOSITED_OPEN_NOTES`) — so that Invoke does return deposits.
+/// Whether `actions` create open notes or open escrow notes, which the pool requires to be funded
+/// by an Invoke in the same transaction.
 fn creates_open_notes(actions: Span<ServerAction>) -> bool {
     let mut creates: bool = false;
     for action in actions {
-        if let ServerAction::EmitOpenNoteCreated(_) = *action {
-            creates = true;
-            break;
+        match *action {
+            ServerAction::EmitOpenNoteCreated(_) |
+            ServerAction::CreateOpenEscrowNote(_) => {
+                creates = true;
+                break;
+            },
+            _ => {},
         }
     }
     creates

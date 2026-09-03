@@ -3,9 +3,9 @@ use core::poseidon::poseidon_hash_span;
 use openzeppelin::security::ReentrancyGuardComponent::Errors as ReentrancyGuardErrors;
 use privacy::actions::{
     AppendInput, ClientAction, ComputeAndInvokeInput, CreateEncNoteInput, CreateEscrowNoteInput,
-    CreateOpenNoteInput, DepositInput, InvokeExternalInput, InvokeInput, OpenChannelInput,
-    OpenSubchannelInput, ServerAction, SetViewingKeyInput, TransferFromInput, TransferToInput,
-    UseEscrowNoteInput, UseNoteInput, WithdrawInput,
+    CreateOpenEscrowNoteInput, CreateOpenNoteInput, DepositInput, InvokeExternalInput, InvokeInput,
+    OpenChannelInput, OpenSubchannelInput, ServerAction, SetViewingKeyInput, TransferFromInput,
+    TransferToInput, UseEscrowNoteInput, UseNoteInput, UseOpenEscrowNoteInput, WithdrawInput,
 };
 use privacy::hashes::{
     compute_identity_key, compute_note_id, compute_nullifier, compute_subchannel_id,
@@ -111,8 +111,57 @@ fn test_action_enum_discriminants_are_append_only() {
         ),
         11,
     );
+    assert_eq!(
+        client_action_variant(
+            ClientAction::CreateOpenEscrowNote(
+                CreateOpenEscrowNoteInput {
+                    contract_address: 1.try_into().unwrap(),
+                    policy_commitment: 1,
+                    token: 1.try_into().unwrap(),
+                    secret: 1,
+                },
+            ),
+        ),
+        12,
+    );
+    assert_eq!(
+        client_action_variant(
+            ClientAction::UseOpenEscrowNote(
+                UseOpenEscrowNoteInput { note_id: 1, amount: 1, secret: 1 },
+            ),
+        ),
+        13,
+    );
     assert_eq!(server_action_variant(ServerAction::Invoke(invoke)), 10);
     assert_eq!(server_action_variant(ServerAction::InvokeWithComputation(invoke)), 11);
+    assert_eq!(
+        server_action_variant(
+            ServerAction::CreateOpenEscrowNote(
+                events::OpenEscrowNoteCreated {
+                    note_id: 1,
+                    contract_address: 1.try_into().unwrap(),
+                    policy_commitment: 1,
+                    token: 1.try_into().unwrap(),
+                    opening_commitment: 1,
+                },
+            ),
+        ),
+        14,
+    );
+    assert_eq!(
+        server_action_variant(
+            ServerAction::UseOpenEscrowNote(
+                events::OpenEscrowNoteUsed {
+                    nullifier: 1,
+                    contract_address: 1.try_into().unwrap(),
+                    policy_commitment: 1,
+                    token: 1.try_into().unwrap(),
+                    amount: 1,
+                },
+            ),
+        ),
+        15,
+    );
 }
 
 #[test]
