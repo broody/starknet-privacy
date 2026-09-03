@@ -540,6 +540,8 @@ export class ActionCompiler {
     // surpluses were handled in resolveNotes
 
     const escrowContractTargets = new Set([
+      ...(actions.useEscrowNotes ?? []).map((note) => toBigInt(note.contractAddress)),
+      ...(actions.useOpenEscrowNotes ?? []).map((note) => toBigInt(note.contractAddress)),
       ...(actions.createEscrowNotes ?? []).map((note) => toBigInt(note.contractAddress)),
       ...(actions.createOpenEscrowNotes ?? []).map((note) => toBigInt(note.contractAddress)),
     ]);
@@ -571,10 +573,10 @@ export class ActionCompiler {
     if (actions.invoke) {
       const call = actions.invoke.callBuilder(this.invokeBuilderArgs(clientActions, pool));
       const target = toBigInt(call.contractAddress);
-      const createdEscrowNoteTarget = escrowContractTargets.values().next().value;
+      const escrowNoteTarget = escrowContractTargets.values().next().value;
       assert(
-        createdEscrowNoteTarget === undefined || target === createdEscrowNoteTarget,
-        () => "The invoke target must match the contract of created escrow notes"
+        escrowNoteTarget === undefined || target === escrowNoteTarget,
+        () => "The invoke target must match the contract of escrow notes"
       );
       const calldata = CallData.compile(call.calldata ?? []).map(toBigInt);
 
@@ -594,10 +596,10 @@ export class ActionCompiler {
         this.invokeBuilderArgs(clientActions, pool)
       );
       const target = toBigInt(details.contractAddress);
-      const createdEscrowNoteTarget = escrowContractTargets.values().next().value;
+      const escrowNoteTarget = escrowContractTargets.values().next().value;
       assert(
-        createdEscrowNoteTarget === undefined || target === createdEscrowNoteTarget,
-        () => "The invoke target must match the contract of created escrow notes"
+        escrowNoteTarget === undefined || target === escrowNoteTarget,
+        () => "The invoke target must match the contract of escrow notes"
       );
       const compute_additional_data = CallData.compile(details.computeAdditionalData ?? []).map(
         toBigInt

@@ -55,7 +55,12 @@ describe("escrow note builder", () => {
     const result = await transfers.alice
       .build()
       .with(env.ace)
-      .useEscrowNote({ noteId: 123n, amount: 37n, secret: 456n })
+      .useEscrowNote({
+        noteId: 123n,
+        amount: 37n,
+        secret: 456n,
+        contractAddress: CONTROLLER,
+      })
       .withdraw({ recipient: env.alice.address, amount: 37n })
       .done()
       .invoke(() => ({ contractAddress: CONTROLLER, calldata: [] }))
@@ -123,7 +128,12 @@ describe("escrow note builder", () => {
     const result = await transfers.alice
       .build()
       .with(env.ace)
-      .useOpenEscrowNote({ noteId: 123n, amount: 37n, secret: 456n })
+      .useOpenEscrowNote({
+        noteId: 123n,
+        amount: 37n,
+        secret: 456n,
+        contractAddress: CONTROLLER,
+      })
       .withdraw({ recipient: env.alice.address, amount: 37n })
       .done()
       .invoke(() => ({ contractAddress: CONTROLLER, calldata: [] }))
@@ -134,6 +144,52 @@ describe("escrow note builder", () => {
       "Withdraw",
       "InvokeExternal",
     ]);
+  });
+
+  it("rejects an invoke target that does not control the spent escrow note", async () => {
+    const { env, transfers } = createTestEnv();
+    const wrongTarget = transfers.alice
+      .build()
+      .with(env.ace)
+      .useEscrowNote({
+        noteId: 123n,
+        amount: 37n,
+        secret: 456n,
+        contractAddress: CONTROLLER,
+      })
+      .withdraw({ recipient: env.alice.address, amount: 37n })
+      .done()
+      .invoke(() => ({ contractAddress: OTHER_CONTROLLER, calldata: [] }));
+
+    await expect(wrongTarget.createProofInvocation()).rejects.toThrow(
+      "The invoke target must match the contract of escrow notes"
+    );
+  });
+
+  it("rejects spends controlled by different application contracts", async () => {
+    const { env, transfers } = createTestEnv();
+    const mixedControllers = transfers.alice
+      .build()
+      .with(env.ace)
+      .useEscrowNote({
+        noteId: 123n,
+        amount: 18n,
+        secret: 456n,
+        contractAddress: CONTROLLER,
+      })
+      .useOpenEscrowNote({
+        noteId: 789n,
+        amount: 19n,
+        secret: 101n,
+        contractAddress: OTHER_CONTROLLER,
+      })
+      .withdraw({ recipient: env.alice.address, amount: 37n })
+      .done()
+      .invoke(() => ({ contractAddress: CONTROLLER, calldata: [] }));
+
+    await expect(mixedControllers.createProofInvocation()).rejects.toThrow(
+      "A transaction may target only one escrow application contract"
+    );
   });
 
   it("applies invoke and target invariants to open escrow notes", async () => {
@@ -160,7 +216,7 @@ describe("escrow note builder", () => {
       .invoke(() => ({ contractAddress: OTHER_CONTROLLER, calldata: [] }));
 
     await expect(wrongTarget.createProofInvocation()).rejects.toThrow(
-      "The invoke target must match the contract of created escrow notes"
+      "The invoke target must match the contract of escrow notes"
     );
   });
 
@@ -195,7 +251,7 @@ describe("escrow note builder", () => {
       .invoke(() => ({ contractAddress: OTHER_CONTROLLER, calldata: [] }));
 
     await expect(wrongTarget.createProofInvocation()).rejects.toThrow(
-      "The invoke target must match the contract of created escrow notes"
+      "The invoke target must match the contract of escrow notes"
     );
   });
 });

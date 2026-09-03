@@ -210,6 +210,8 @@ export type EscrowNoteSpend = {
   noteId: NoteId;
   amount: Amount;
   secret: BigNumberish;
+  /** Used to bind the local invoke target; the pool verifies it from committed note state. */
+  contractAddress: StarknetAddress;
 };
 
 export type CreateEscrowNoteAction = EscrowNoteCreation & {
@@ -235,6 +237,8 @@ export type OpenEscrowNoteSpend = {
   /** Public amount, checked against the note stored by the pool. */
   amount: Amount;
   secret: BigNumberish;
+  /** Used to bind the local invoke target; the pool verifies it from stored note state. */
+  contractAddress: StarknetAddress;
 };
 
 export type CreateOpenEscrowNoteAction = OpenEscrowNoteCreation & {

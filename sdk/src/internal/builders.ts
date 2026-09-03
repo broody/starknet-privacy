@@ -94,6 +94,7 @@ export class TokenOperationsBuilderImpl implements TokenOperationsBuilder {
         noteId: note.noteId,
         amount: note.amount,
         secret: note.secret,
+        contractAddress: note.contractAddress,
       });
     }
     return this;
@@ -106,6 +107,7 @@ export class TokenOperationsBuilderImpl implements TokenOperationsBuilder {
         noteId: note.noteId,
         amount: note.amount,
         secret: note.secret,
+        contractAddress: note.contractAddress,
       });
     }
     return this;
