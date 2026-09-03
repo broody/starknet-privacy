@@ -107,8 +107,12 @@ function getDelegatedAddress(
     return { kind: "none" };
   }
 
-  // The pool assigns a subject only for an invoke that returns deposits.
-  if (!createsOpenNotes(openNoteDepositor.action)) {
+  // A valid open escrow creation must be funded by this callback. For regular open notes, the
+  // anonymizer calldata tells us whether the callback actually returns any deposits.
+  const createsOpenEscrowNote = poolCall.actions.some(
+    (action) => action.activeVariant() === "CreateOpenEscrowNote"
+  );
+  if (!createsOpenEscrowNote && !createsOpenNotes(openNoteDepositor.action)) {
     return { kind: "none" };
   }
 
@@ -125,12 +129,18 @@ function getDelegatedAddress(
 
 /**
  * Under the invariant that an open note must be funded within the transaction that creates it, any
- * transaction carrying a `CreateOpenNote` action has an open-note depositor.
+ * transaction carrying a `CreateOpenNote` or `CreateOpenEscrowNote` action has an open-note
+ * depositor.
  */
 function getOpenNoteDepositor(
   actions: CairoCustomEnum[]
 ): OpenNoteDepositor | null {
-  if (!actions.some((action) => action.activeVariant() === "CreateOpenNote")) {
+  if (
+    !actions.some((action) => {
+      const variant = action.activeVariant();
+      return variant === "CreateOpenNote" || variant === "CreateOpenEscrowNote";
+    })
+  ) {
     return null;
   }
   for (const action of actions) {

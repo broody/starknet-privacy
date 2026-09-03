@@ -125,6 +125,20 @@ export function createOpenNoteAction(): CairoCustomEnum {
   });
 }
 
+/** An open escrow note that `target` must fund through its escrow callback. */
+export function createOpenEscrowNoteAction(
+  target = SWAP_EXECUTOR
+): CairoCustomEnum {
+  return new CairoCustomEnum({
+    CreateOpenEscrowNote: {
+      contract_address: target,
+      policy_commitment: "0xcafe",
+      token: TOKEN,
+      secret: "0xbeef",
+    },
+  });
+}
+
 /** A plain invoke on `target`, the shape a swap or lending executor is driven through. */
 export function invokeExternalAction(target: string): CairoCustomEnum {
   return new CairoCustomEnum({
