@@ -44,10 +44,17 @@ import {
   compute_nullifier,
   compute_outgoing_channel_id,
   compute_identity_key,
+  compute_escrow_note_id,
+  compute_escrow_note_commitment,
+  compute_escrow_note_nullifier,
 } from "../utils/hashes.js";
 
 import { toHex } from "../utils/convert.js";
-import { ClientAction } from "../internal/client-actions.js";
+import type {
+  ClientAction,
+  CreateEscrowNoteInput,
+  UseEscrowNoteInput,
+} from "../internal/client-actions.js";
 
 type OpenNote = {
   r: bigint;
@@ -62,6 +69,13 @@ type MockServerAction = {
   apply: () => void;
   /** actions that shouldn't be applied in the private side */
   deferred?: boolean;
+  /** Metadata carried by escrow emit actions, matching Cairo's target collection. */
+  escrowTarget?: StarknetAddressBigint;
+};
+
+type MockEscrowBatch = {
+  target?: StarknetAddressBigint;
+  callbackApplied: boolean;
 };
 
 type EncryptedNote = { packed: bigint; token: StarknetAddressBigint; index: number };
@@ -73,6 +87,7 @@ export type MockPoolContractSnapshot = {
   subchannels: Map<Hash, EncSubchannelInfo>;
   subchannelMarkers: Set<Hash>;
   notes: Map<Hash, EncryptedNote | OpenNote>;
+  escrowNotes: Map<Hash, EscrowNote>;
   nullifiers: Set<Hash>;
   outgoingChannels: Map<bigint, EncOutgoingChannelInfo>;
 };
@@ -97,9 +112,11 @@ export class MockPoolContract implements MockContract, PoolContractInterface {
   private subchannels = new Map<Hash, EncSubchannelInfo>();
   private subchannelMarkers = new Set<Hash>();
   private notes = new Map<Hash, EncryptedNote | OpenNote>();
+  private escrowNotes = new Map<Hash, EscrowNote>();
   private nullifiers = new Set<Hash>();
   private outgoingChannels = new Map<bigint, EncOutgoingChannelInfo>();
   private outgoingChannelCounters = new AddressMap<number>(() => 0);
+  private escrowBatch?: MockEscrowBatch;
   // Class hash this mock pool is "deployed" under; heads the proof payload,
   // where the SDK strips it before building apply_actions calldata.
   classHash = "0x0";
@@ -124,13 +141,15 @@ export class MockPoolContract implements MockContract, PoolContractInterface {
     return this.publicKeys.has(userAddr) ? toBigInt(this.publicKeys.get(userAddr)!) : 0n;
   }
 
-  get_escrow_note(_noteId: bigint): EscrowNote {
-    return {
-      note_commitment: 0n,
-      contract_address: 0n,
-      policy_commitment: 0n,
-      token: 0n,
-    };
+  get_escrow_note(noteId: bigint): EscrowNote {
+    return (
+      this.escrowNotes.get(noteId) ?? {
+        note_commitment: 0n,
+        contract_address: 0n,
+        policy_commitment: 0n,
+        token: 0n,
+      }
+    );
   }
 
   get_open_escrow_note(_noteId: bigint): OpenEscrowNote {
@@ -326,13 +345,23 @@ export class MockPoolContract implements MockContract, PoolContractInterface {
 
     const snapshot = this.snapshot();
     const serverActions: MockServerAction[] = [];
+    const escrowBatch: MockEscrowBatch = {
+      callbackApplied: false,
+    };
 
     try {
       for (const action of clientActions) {
-        const actions = this.execute_action(sender, privateKey, action);
+        const actions = this.execute_action(sender, privateKey, action, escrowBatch);
         // Apply pool-state actions immediately (required for assertions in subsequent actions)
         // Defer ERC20-modifying actions - only applied during replay
         for (const serverAction of actions) {
+          if (serverAction.escrowTarget !== undefined) {
+            assert(
+              escrowBatch.target === undefined || escrowBatch.target === serverAction.escrowTarget,
+              () => "A transaction may target only one escrow application contract"
+            );
+            escrowBatch.target = serverAction.escrowTarget;
+          }
           if (!serverAction.deferred) {
             serverAction.apply();
           }
@@ -344,6 +373,7 @@ export class MockPoolContract implements MockContract, PoolContractInterface {
       this.restore(snapshot);
     }
 
+    this.escrowBatch = escrowBatch;
     return serverActions;
   }
 
@@ -364,7 +394,11 @@ export class MockPoolContract implements MockContract, PoolContractInterface {
       );
       this.serverActions[i].apply();
     }
+    if (this.escrowBatch?.target !== undefined) {
+      assert(this.escrowBatch.callbackApplied, () => "Escrow-note callback required");
+    }
     this.serverActions = [];
+    this.escrowBatch = undefined;
 
     const screeningSuffix = calldata.slice(actionCount);
     const isNoneAttestation = screeningSuffix.length == 1 && screeningSuffix[0] == "0x1";
@@ -494,6 +528,7 @@ export class MockPoolContract implements MockContract, PoolContractInterface {
       subchannels: new Map(this.subchannels),
       subchannelMarkers: new Set(this.subchannelMarkers),
       notes: notesSnapshot,
+      escrowNotes: new Map(this.escrowNotes),
       nullifiers: new Set(this.nullifiers),
       outgoingChannels: new Map(this.outgoingChannels),
     };
@@ -515,6 +550,7 @@ export class MockPoolContract implements MockContract, PoolContractInterface {
     this.subchannels = new Map(s.subchannels);
     this.subchannelMarkers = new Set(s.subchannelMarkers);
     this.notes = new Map(s.notes);
+    this.escrowNotes = new Map(s.escrowNotes);
     this.nullifiers = new Set(s.nullifiers);
     this.outgoingChannels = new Map(s.outgoingChannels);
   }
@@ -530,7 +566,8 @@ export class MockPoolContract implements MockContract, PoolContractInterface {
   private execute_action(
     sender: StarknetAddressBigint,
     privateKey: bigint,
-    action: ClientAction
+    action: ClientAction,
+    escrowBatch: MockEscrowBatch
   ): MockServerAction[] {
     switch (action.type) {
       case "SetViewingKey":
@@ -608,11 +645,23 @@ export class MockPoolContract implements MockContract, PoolContractInterface {
           ),
         ];
 
+      case "CreateEscrowNote":
+        return this.createEscrowNote(sender, action.input);
+
+      case "UseEscrowNote":
+        return this.useEscrowNote(action.input);
+
       case "Withdraw":
         return [this.withdraw(action.input.token, action.input.to_addr, action.input.amount)];
 
       case "InvokeExternal":
-        return [this.invoke(action.input.contract_address, action.input.calldata as bigint[])];
+        return [
+          this.invoke(
+            action.input.contract_address,
+            action.input.calldata as bigint[],
+            escrowBatch
+          ),
+        ];
 
       case "ComputeAndInvoke":
         return [
@@ -621,7 +670,8 @@ export class MockPoolContract implements MockContract, PoolContractInterface {
             privateKey,
             action.input.contract_address,
             action.input.compute_additional_data as bigint[],
-            action.input.invoke_additional_data as bigint[]
+            action.input.invoke_additional_data as bigint[],
+            escrowBatch
           ),
         ];
 
@@ -875,6 +925,76 @@ export class MockPoolContract implements MockContract, PoolContractInterface {
     };
   }
 
+  private createEscrowNote(
+    sender: StarknetAddressBigint,
+    input: CreateEscrowNoteInput
+  ): MockServerAction[] {
+    const { contract_address, policy_commitment, token, amount, secret } = input;
+    const noteId = compute_escrow_note_id(
+      sender,
+      contract_address,
+      policy_commitment,
+      token,
+      secret
+    );
+    const note: EscrowNote = {
+      note_commitment: compute_escrow_note_commitment(
+        noteId,
+        contract_address,
+        policy_commitment,
+        token,
+        amount,
+        secret
+      ),
+      contract_address,
+      policy_commitment,
+      token,
+    };
+    return [
+      {
+        type: "WriteOnce",
+        apply: () => {
+          assert(!this.escrowNotes.has(noteId), () => `Escrow note ${noteId} already exists`);
+          this.escrowNotes.set(noteId, note);
+        },
+      },
+      this.escrowEvent("EmitEscrowNoteCreated", contract_address),
+    ];
+  }
+
+  private useEscrowNote(input: UseEscrowNoteInput): MockServerAction[] {
+    const { note_id, amount, secret } = input;
+    const note = this.escrowNotes.get(note_id);
+    assert(note, () => `Escrow note ${note_id} does not exist`);
+    const expectedCommitment = compute_escrow_note_commitment(
+      note_id,
+      toBigInt(note.contract_address),
+      toBigInt(note.policy_commitment),
+      toBigInt(note.token),
+      amount,
+      secret
+    );
+    assert(
+      expectedCommitment === toBigInt(note.note_commitment),
+      () => `Invalid opening for escrow note ${note_id}`
+    );
+    const nullifier = compute_escrow_note_nullifier(note_id, secret);
+    return [
+      {
+        type: "WriteOnce",
+        apply: () => {
+          assert(!this.nullifiers.has(nullifier), () => `Nullifier ${nullifier} already exists`);
+          this.nullifiers.add(nullifier);
+        },
+      },
+      this.escrowEvent("EmitEscrowNoteUsed", toBigInt(note.contract_address)),
+    ];
+  }
+
+  private escrowEvent(type: string, escrowTarget: StarknetAddressBigint): MockServerAction {
+    return { type, apply: () => {}, escrowTarget };
+  }
+
   private deposit(
     from: StarknetAddressBigint,
     token: StarknetAddressBigint,
@@ -899,12 +1019,21 @@ export class MockPoolContract implements MockContract, PoolContractInterface {
     };
   }
 
-  private invoke(contractAddress: StarknetAddressBigint, calldata: bigint[]): MockServerAction {
+  private invoke(
+    contractAddress: StarknetAddressBigint,
+    calldata: bigint[],
+    escrowBatch: MockEscrowBatch
+  ): MockServerAction {
     return {
       type: "InvokeExternal",
       apply: () => {
-        const entrypoint = "privacy_invoke";
-        this.contracts.call(contractAddress, entrypoint, calldata);
+        this.invokeCallback(
+          contractAddress,
+          "privacy_invoke",
+          "privacy_escrow_invoke",
+          calldata,
+          escrowBatch
+        );
       },
       deferred: true,
     };
@@ -918,7 +1047,8 @@ export class MockPoolContract implements MockContract, PoolContractInterface {
     privateKey: bigint,
     contractAddress: StarknetAddressBigint,
     computeAdditionalData: bigint[],
-    invokeAdditionalData: bigint[]
+    invokeAdditionalData: bigint[],
+    escrowBatch: MockEscrowBatch
   ): MockServerAction {
     return {
       type: "ComputeAndInvoke",
@@ -937,13 +1067,39 @@ export class MockPoolContract implements MockContract, PoolContractInterface {
           () => `Mock privacy_compute at ${toHex(contractAddress)} returned undefined`
         );
         const computedFelts = (Array.isArray(computed) ? computed : [computed]).map(toBigInt);
-        this.contracts.call(contractAddress, "privacy_invoke_with_computation", [
-          ...computedFelts,
-          ...invokeAdditionalData,
-        ]);
+        this.invokeCallback(
+          contractAddress,
+          "privacy_invoke_with_computation",
+          "privacy_escrow_invoke_with_computation",
+          [...computedFelts, ...invokeAdditionalData],
+          escrowBatch
+        );
       },
       deferred: true,
     };
+  }
+
+  private invokeCallback(
+    contractAddress: StarknetAddressBigint,
+    standardEntrypoint: string,
+    escrowEntrypoint: string,
+    calldata: bigint[],
+    escrowBatch: MockEscrowBatch
+  ): void {
+    if (escrowBatch.target === undefined) {
+      this.contracts.call(contractAddress, standardEntrypoint, calldata);
+      return;
+    }
+
+    assert(
+      contractAddress === escrowBatch.target,
+      () => "The invoke target must match the contract of escrow notes"
+    );
+    // Mock server actions are closure-backed rather than Cairo-serialized, so the
+    // context preserves the callback shape but deliberately carries no fake hash.
+    const context = { actions_hash: 0n, serialized_actions: [] as bigint[] };
+    this.contracts.call(contractAddress, escrowEntrypoint, [context, ...calldata]);
+    escrowBatch.callbackApplied = true;
   }
 
   private validateTokenTotals(sender: StarknetAddressBigint, clientActions: ClientAction[]): void {
@@ -989,6 +1145,17 @@ export class MockPoolContract implements MockContract, PoolContractInterface {
             assert(amount >= 0n, () => `CreateEncNote amount must be non-negative: ${amount}`);
             updateTotal(action.input.token, -amount);
           }
+          break;
+        }
+
+        case "CreateEscrowNote":
+          updateTotal(action.input.token, -action.input.amount);
+          break;
+
+        case "UseEscrowNote": {
+          const note = this.escrowNotes.get(action.input.note_id);
+          assert(note, () => `Escrow note ${action.input.note_id} does not exist`);
+          updateTotal(toBigInt(note.token), action.input.amount);
           break;
         }
 

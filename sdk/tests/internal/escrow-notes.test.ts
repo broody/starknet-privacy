@@ -2,7 +2,12 @@ import { describe, expect, it } from "vitest";
 import type { ClientAction } from "../../src/internal/client-actions.js";
 import { bigintReviver } from "../../src/testing/mock-proof-invocation-factory.js";
 import { toBigInt } from "../../src/utils/index.js";
-import { compute_open_escrow_note_id } from "../../src/utils/hashes.js";
+import {
+  compute_escrow_note_commitment,
+  compute_escrow_note_id,
+  compute_escrow_note_nullifier,
+  compute_open_escrow_note_id,
+} from "../../src/utils/hashes.js";
 import { createTestEnv } from "../helpers/test-fixtures.js";
 
 const CONTROLLER = "0xabc";
@@ -13,6 +18,87 @@ function clientActions(calldata: unknown): ClientAction[] {
 }
 
 describe("escrow note builder", () => {
+  it("executes the private escrow-note lifecycle through the mock pool", async () => {
+    const { env, mocknet, transfers } = createTestEnv();
+    const token = toBigInt(env.ace);
+    const controller = toBigInt(CONTROLLER);
+    const policyCommitment = 91n;
+    const secret = 123n;
+    const noteId = compute_escrow_note_id(
+      env.alice.address,
+      controller,
+      policyCommitment,
+      token,
+      secret
+    );
+    let callbackCount = 0;
+    env.contracts.register({
+      address: CONTROLLER,
+      privacy_escrow_invoke: () => {
+        callbackCount++;
+        return { open_escrow_note_deposits: [] };
+      },
+    });
+
+    const creation = await transfers.alice
+      .build()
+      .with(token)
+      .deposit({ amount: 37n })
+      .createEscrowNote({
+        contractAddress: controller,
+        policyCommitment,
+        amount: 37n,
+        secret,
+      })
+      .done()
+      .invoke(() => ({ contractAddress: controller, calldata: [7n] }))
+      .execute();
+    const creationActions = creation.callAndProof.call.calldata as string[];
+    expect(creationActions.indexOf("EmitEscrowNoteCreated")).toBe(
+      creationActions.indexOf("WriteOnce") + 1
+    );
+    mocknet.executeOutside(creation);
+
+    expect(env.pool.get_escrow_note(noteId)).toEqual({
+      note_commitment: compute_escrow_note_commitment(
+        noteId,
+        controller,
+        policyCommitment,
+        token,
+        37n,
+        secret
+      ),
+      contract_address: controller,
+      policy_commitment: policyCommitment,
+      token,
+    });
+
+    const spend = () =>
+      transfers.alice
+        .build()
+        .with(token)
+        .useEscrowNote({
+          noteId,
+          amount: 37n,
+          secret,
+          contractAddress: controller,
+        })
+        .withdraw({ amount: 37n })
+        .done()
+        .invoke(() => ({ contractAddress: controller, calldata: [8n] }));
+
+    const spending = await spend().execute();
+    const spendActions = spending.callAndProof.call.calldata as string[];
+    expect(spendActions.indexOf("EmitEscrowNoteUsed")).toBe(spendActions.indexOf("WriteOnce") + 1);
+    mocknet.executeOutside(spending);
+
+    const nullifier = compute_escrow_note_nullifier(noteId, secret);
+    expect(env.pool.nullifier_exists(nullifier)).toBe(true);
+    expect(env.contracts.get(token).balanceOf(env.alice.address)).toBe(1000n);
+    expect(callbackCount).toBe(2);
+    await expect(spend().execute()).rejects.toThrow(/Nullifier .* already exists/);
+  });
+
   it("compiles creation with a private secret and an atomic contract invoke", async () => {
     const { env, transfers } = createTestEnv();
 
