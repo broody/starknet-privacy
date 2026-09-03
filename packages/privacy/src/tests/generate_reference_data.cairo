@@ -38,8 +38,6 @@ const AMOUNT: u128 = 1000;
 const AUDITOR_PRIVATE_KEY: felt252 = 0x54321;
 const USER_ADDR: felt252 = 0x999;
 const USER_PRIVATE_KEY: felt252 = 0x888;
-const CONTRACT_NOTE_CHAIN_ID: felt252 = 0x1111;
-const CONTRACT_NOTE_POOL: felt252 = 0x2222;
 const CONTRACT_ADDRESS: felt252 = 0x3333;
 const POLICY_COMMITMENT: felt252 = 0x5555;
 const CONTRACT_NOTE_SECRET: felt252 = 0x6666;
@@ -69,8 +67,6 @@ fn generate_reference_hashes() {
     let note_id = compute_note_id(CHANNEL_KEY, token, INDEX);
     let nullifier = compute_nullifier(CHANNEL_KEY, token, INDEX, SENDER_PRIVATE_KEY);
     let contract_note_id = compute_contract_note_id(
-        chain_id: CONTRACT_NOTE_CHAIN_ID,
-        pool_address: to_address(CONTRACT_NOTE_POOL),
         sender_addr: sender,
         contract_address: to_address(CONTRACT_ADDRESS),
         policy_commitment: POLICY_COMMITMENT,
@@ -78,8 +74,6 @@ fn generate_reference_hashes() {
         secret: CONTRACT_NOTE_SECRET,
     );
     let contract_note_commitment = compute_contract_note_commitment(
-        chain_id: CONTRACT_NOTE_CHAIN_ID,
-        pool_address: to_address(CONTRACT_NOTE_POOL),
         note_id: contract_note_id,
         contract_address: to_address(CONTRACT_ADDRESS),
         policy_commitment: POLICY_COMMITMENT,
@@ -88,10 +82,7 @@ fn generate_reference_hashes() {
         secret: CONTRACT_NOTE_SECRET,
     );
     let contract_note_nullifier = compute_contract_note_nullifier(
-        chain_id: CONTRACT_NOTE_CHAIN_ID,
-        pool_address: to_address(CONTRACT_NOTE_POOL),
-        note_id: contract_note_id,
-        secret: CONTRACT_NOTE_SECRET,
+        note_id: contract_note_id, secret: CONTRACT_NOTE_SECRET,
     );
 
     // Outgoing channel id
@@ -162,8 +153,6 @@ fn generate_reference_hashes() {
     println!("inputs.auditorPublicKey: 0x{:x}", auditor_public_key);
     println!("inputs.userAddr: 0x{:x}", USER_ADDR);
     println!("inputs.userPrivateKey: 0x{:x}", USER_PRIVATE_KEY);
-    println!("inputs.contractNoteChainId: 0x{:x}", CONTRACT_NOTE_CHAIN_ID);
-    println!("inputs.contractNotePool: 0x{:x}", CONTRACT_NOTE_POOL);
     println!("inputs.contractAddress: 0x{:x}", CONTRACT_ADDRESS);
     println!("inputs.policyCommitment: 0x{:x}", POLICY_COMMITMENT);
     println!("inputs.contractNoteSecret: 0x{:x}", CONTRACT_NOTE_SECRET);

@@ -117,6 +117,31 @@ fn spend_actions(
 }
 
 #[test]
+fn test_contract_note_actions_hash_is_chain_and_pool_bound() {
+    let actions: Array<ServerAction> = array![];
+    let chain_id = 'CHAIN_ID';
+    let pool_address: ContractAddress = 'POOL_ADDRESS'.try_into().unwrap();
+    let actions_hash = compute_contract_note_actions_hash(
+        actions: actions.span(), :chain_id, :pool_address,
+    );
+
+    assert_ne!(
+        actions_hash,
+        compute_contract_note_actions_hash(
+            actions: actions.span(), chain_id: 'OTHER_CHAIN', :pool_address,
+        ),
+    );
+    assert_ne!(
+        actions_hash,
+        compute_contract_note_actions_hash(
+            actions: actions.span(),
+            :chain_id,
+            pool_address: 'OTHER_POOL_ADDRESS'.try_into().unwrap(),
+        ),
+    );
+}
+
+#[test]
 fn test_contract_note_lifecycle_binds_exact_actions_and_authorizes_atomically() {
     let mut test: Test = Default::default();
     let mut user = test.new_user();
@@ -150,12 +175,7 @@ fn test_contract_note_lifecycle_binds_exact_actions_and_authorizes_atomically() 
     let mut spy = spy_events();
     test.privacy.apply_actions(:actions);
 
-    let nullifier = compute_contract_note_nullifier(
-        chain_id: get_execution_info().tx_info.chain_id,
-        pool_address: test.privacy.address,
-        note_id: created.note_id,
-        secret: SECRET,
-    );
+    let nullifier = compute_contract_note_nullifier(note_id: created.note_id, secret: SECRET);
     assert!(test.privacy.contract_note_nullifier_exists(:nullifier));
     assert_eq!(controller_dispatcher.callback_count(), 2);
     assert_eq!(controller_dispatcher.last_actions_hash(), expected_actions_hash);
@@ -204,12 +224,7 @@ fn test_contract_note_survives_contract_upgrade() {
     mock_call(contract_address, CONTRACT_NOTE_INVOKE_SELECTOR, no_deposits.span(), 1);
     test.privacy.apply_actions(:actions);
 
-    let nullifier = compute_contract_note_nullifier(
-        chain_id: get_execution_info().tx_info.chain_id,
-        pool_address: test.privacy.address,
-        note_id: created.note_id,
-        secret: SECRET,
-    );
+    let nullifier = compute_contract_note_nullifier(note_id: created.note_id, secret: SECRET);
     assert!(test.privacy.contract_note_nullifier_exists(:nullifier));
 }
 
@@ -237,12 +252,7 @@ fn test_contract_note_spend_requires_callback_and_rolls_back() {
         );
     let result = test.privacy.safe_apply_actions(:actions);
     assert_panic_with_felt_error(:result, expected_error: errors::CONTRACT_NOTE_CALLBACK_REQUIRED);
-    let nullifier = compute_contract_note_nullifier(
-        chain_id: get_execution_info().tx_info.chain_id,
-        pool_address: test.privacy.address,
-        note_id: created.note_id,
-        secret: SECRET,
-    );
+    let nullifier = compute_contract_note_nullifier(note_id: created.note_id, secret: SECRET);
     assert!(!test.privacy.contract_note_nullifier_exists(:nullifier));
 }
 
@@ -272,12 +282,7 @@ fn test_contract_note_spend_rejects_wrong_target_and_denial() {
     let denied_actions = spend_actions(@user, note_id: created.note_id, :output, :controller);
     let denied = test.privacy.safe_apply_actions(actions: denied_actions);
     assert_panic_with_felt_error(result: denied, expected_error: CONTROLLER_DENIED);
-    let nullifier = compute_contract_note_nullifier(
-        chain_id: get_execution_info().tx_info.chain_id,
-        pool_address: test.privacy.address,
-        note_id: created.note_id,
-        secret: SECRET,
-    );
+    let nullifier = compute_contract_note_nullifier(note_id: created.note_id, secret: SECRET);
     assert!(!test.privacy.contract_note_nullifier_exists(:nullifier));
 }
 

@@ -39,8 +39,6 @@ describe("Hash Compatibility with Cairo", () => {
   const index = inputs.index;
   const salt = BigInt(inputs.salt);
   const sharedX = BigInt(inputs.sharedX);
-  const contractNoteChainId = BigInt(inputs.contractNoteChainId);
-  const contractNotePool = BigInt(inputs.contractNotePool);
   const contractAddress = BigInt(inputs.contractAddress);
   const policyCommitment = BigInt(inputs.policyCommitment);
   const contractNoteSecret = BigInt(inputs.contractNoteSecret);
@@ -112,8 +110,6 @@ describe("Hash Compatibility with Cairo", () => {
 
   it("contract note hashes match Cairo", () => {
     const contractNoteId = compute_contract_note_id(
-      contractNoteChainId,
-      contractNotePool,
       sender,
       contractAddress,
       policyCommitment,
@@ -123,8 +119,6 @@ describe("Hash Compatibility with Cairo", () => {
     expect(contractNoteId.toString(16)).toBe(BigInt(outputs.contractNoteId).toString(16));
 
     const noteCommitment = compute_contract_note_commitment(
-      contractNoteChainId,
-      contractNotePool,
       contractNoteId,
       contractAddress,
       policyCommitment,
@@ -133,13 +127,8 @@ describe("Hash Compatibility with Cairo", () => {
       contractNoteSecret
     );
     expect(noteCommitment.toString(16)).toBe(BigInt(outputs.contractNoteCommitment).toString(16));
-    expect(
-      compute_contract_note_nullifier(
-        contractNoteChainId,
-        contractNotePool,
-        contractNoteId,
-        contractNoteSecret
-      ).toString(16)
-    ).toBe(BigInt(outputs.contractNoteNullifier).toString(16));
+    expect(compute_contract_note_nullifier(contractNoteId, contractNoteSecret).toString(16)).toBe(
+      BigInt(outputs.contractNoteNullifier).toString(16)
+    );
   });
 });

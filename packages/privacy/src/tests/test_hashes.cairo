@@ -257,31 +257,33 @@ fn test_compute_nullifier_different_inputs() {
 
 #[test]
 fn test_compute_contract_note_id_different_inputs() {
-    let chain_id = 'CHAIN_ID';
-    let pool_address = hash(['POOL_ADDRESS'].span()).try_into().unwrap();
     let sender_addr = hash(['SENDER_ADDR'].span()).try_into().unwrap();
     let contract_address = hash(['CONTRACT_ADDRESS'].span()).try_into().unwrap();
     let policy_commitment = hash(['POLICY_COMMITMENT'].span());
     let token = hash(['TOKEN'].span()).try_into().unwrap();
     let secret = hash(['SECRET'].span());
     let note_id = compute_contract_note_id(
-        :chain_id,
-        :pool_address,
-        :sender_addr,
-        :contract_address,
-        :policy_commitment,
-        :token,
-        :secret,
+        :sender_addr, :contract_address, :policy_commitment, :token, :secret,
     );
     let other_sender_addr = hash(['OTHER_SENDER_ADDR'].span()).try_into().unwrap();
     let other_secret = hash(['OTHER_SECRET'].span());
     assert_ne!(
         note_id,
         compute_contract_note_id(
-            :chain_id,
-            :pool_address,
-            sender_addr: other_sender_addr,
-            :contract_address,
+            sender_addr: other_sender_addr, :contract_address, :policy_commitment, :token, :secret,
+        ),
+    );
+    assert_ne!(
+        note_id,
+        compute_contract_note_id(
+            :sender_addr, :contract_address, :policy_commitment, :token, secret: other_secret,
+        ),
+    );
+    assert_ne!(
+        note_id,
+        compute_contract_note_id(
+            :sender_addr,
+            contract_address: hash(['OTHER_CONTRACT_ADDRESS'].span()).try_into().unwrap(),
             :policy_commitment,
             :token,
             :secret,
@@ -290,24 +292,20 @@ fn test_compute_contract_note_id_different_inputs() {
     assert_ne!(
         note_id,
         compute_contract_note_id(
-            :chain_id,
-            :pool_address,
             :sender_addr,
             :contract_address,
-            :policy_commitment,
+            policy_commitment: hash(['OTHER_POLICY_COMMITMENT'].span()),
             :token,
-            secret: other_secret,
+            :secret,
         ),
     );
     assert_ne!(
         note_id,
         compute_contract_note_id(
-            chain_id: 'OTHER_CHAIN',
-            :pool_address,
             :sender_addr,
             :contract_address,
             :policy_commitment,
-            :token,
+            token: hash(['OTHER_TOKEN'].span()).try_into().unwrap(),
             :secret,
         ),
     );
@@ -321,8 +319,6 @@ fn test_contract_note_secret_derivations_are_domain_separated() {
 
 #[test]
 fn test_compute_contract_note_commitment_hides_amount_and_secret() {
-    let chain_id = 'CHAIN_ID';
-    let pool_address = hash(['POOL_ADDRESS'].span()).try_into().unwrap();
     let note_id = hash(['NOTE_ID'].span());
     let contract_address = hash(['CONTRACT_ADDRESS'].span()).try_into().unwrap();
     let policy_commitment = hash(['POLICY_COMMITMENT'].span());
@@ -330,33 +326,17 @@ fn test_compute_contract_note_commitment_hides_amount_and_secret() {
     let amount: u128 = 42;
     let secret = hash(['SECRET'].span());
     let commitment = compute_contract_note_commitment(
-        :chain_id,
-        :pool_address,
-        :note_id,
-        :contract_address,
-        :policy_commitment,
-        :token,
-        :amount,
-        :secret,
+        :note_id, :contract_address, :policy_commitment, :token, :amount, :secret,
     );
     assert_ne!(
         commitment,
         compute_contract_note_commitment(
-            :chain_id,
-            :pool_address,
-            :note_id,
-            :contract_address,
-            :policy_commitment,
-            :token,
-            amount: amount + 1,
-            :secret,
+            :note_id, :contract_address, :policy_commitment, :token, amount: amount + 1, :secret,
         ),
     );
     assert_ne!(
         commitment,
         compute_contract_note_commitment(
-            :chain_id,
-            :pool_address,
             :note_id,
             :contract_address,
             :policy_commitment,
@@ -368,35 +348,14 @@ fn test_compute_contract_note_commitment_hides_amount_and_secret() {
 }
 
 #[test]
-fn test_compute_contract_note_nullifier_is_pool_and_chain_bound() {
-    let chain_id = 'CHAIN_ID';
-    let pool_address = hash(['POOL_ADDRESS'].span()).try_into().unwrap();
+fn test_compute_contract_note_nullifier_depends_on_note_and_secret() {
     let note_id = hash(['NOTE_ID'].span());
     let secret = hash(['SECRET'].span());
-    let nullifier = compute_contract_note_nullifier(:chain_id, :pool_address, :note_id, :secret);
+    let nullifier = compute_contract_note_nullifier(:note_id, :secret);
     assert_ne!(
-        nullifier,
-        compute_contract_note_nullifier(chain_id: 'OTHER_CHAIN', :pool_address, :note_id, :secret),
+        nullifier, compute_contract_note_nullifier(note_id: hash(['OTHER_NOTE'].span()), :secret),
     );
     assert_ne!(
-        nullifier,
-        compute_contract_note_nullifier(
-            :chain_id,
-            pool_address: hash(['OTHER_POOL'].span()).try_into().unwrap(),
-            :note_id,
-            :secret,
-        ),
-    );
-    assert_ne!(
-        nullifier,
-        compute_contract_note_nullifier(
-            :chain_id, :pool_address, note_id: hash(['OTHER_NOTE'].span()), :secret,
-        ),
-    );
-    assert_ne!(
-        nullifier,
-        compute_contract_note_nullifier(
-            :chain_id, :pool_address, :note_id, secret: hash(['OTHER_SECRET'].span()),
-        ),
+        nullifier, compute_contract_note_nullifier(:note_id, secret: hash(['OTHER_SECRET'].span())),
     );
 }

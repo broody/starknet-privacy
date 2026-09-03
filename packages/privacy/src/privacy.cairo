@@ -743,27 +743,11 @@ pub mod Privacy {
             } = input;
             // Keep the authenticated sender in the private note-id preimage. The secret-derived
             // nonce prevents public address enumeration.
-            let execution_info = get_execution_info();
-            let chain_id = execution_info.tx_info.chain_id;
-            let pool_address = get_contract_address();
             let note_id = compute_contract_note_id(
-                :chain_id,
-                :pool_address,
-                :sender_addr,
-                :contract_address,
-                :policy_commitment,
-                :token,
-                :secret,
+                :sender_addr, :contract_address, :policy_commitment, :token, :secret,
             );
             let note_commitment = compute_contract_note_commitment(
-                :chain_id,
-                :pool_address,
-                :note_id,
-                :contract_address,
-                :policy_commitment,
-                :token,
-                :amount,
-                :secret,
+                :note_id, :contract_address, :policy_commitment, :token, :amount, :secret,
             );
             assert(note_commitment.is_non_zero(), internal_errors::ZERO_NOTE_VALUE);
 
@@ -786,12 +770,7 @@ pub mod Privacy {
             let UseContractNoteInput { note_id, amount, secret } = input;
             let note = self.contract_notes.read(note_id);
             assert(note.note_commitment.is_non_zero(), errors::CONTRACT_NOTE_NOT_FOUND);
-            let execution_info = get_execution_info();
-            let chain_id = execution_info.tx_info.chain_id;
-            let pool_address = get_contract_address();
             let expected_commitment = compute_contract_note_commitment(
-                :chain_id,
-                :pool_address,
                 :note_id,
                 contract_address: note.contract_address,
                 policy_commitment: note.policy_commitment,
@@ -802,9 +781,7 @@ pub mod Privacy {
             assert(
                 expected_commitment == note.note_commitment, errors::INVALID_CONTRACT_NOTE_OPENING,
             );
-            let nullifier = compute_contract_note_nullifier(
-                :chain_id, :pool_address, :note_id, :secret,
-            );
+            let nullifier = compute_contract_note_nullifier(:note_id, :secret);
 
             token_balances.add_balance(token: note.token, :amount);
 

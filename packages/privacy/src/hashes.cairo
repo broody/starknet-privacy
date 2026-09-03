@@ -259,8 +259,6 @@ pub(crate) fn derive_contract_note_blinding(secret: felt252) -> felt252 {
 
 /// Computes an unlinkable contract-note ID from a private random secret.
 pub(crate) fn compute_contract_note_id(
-    chain_id: felt252,
-    pool_address: ContractAddress,
     sender_addr: ContractAddress,
     contract_address: ContractAddress,
     policy_commitment: felt252,
@@ -269,9 +267,8 @@ pub(crate) fn compute_contract_note_id(
 ) -> felt252 {
     hash(
         [
-            CONTRACT_NOTE_ID_TAG, chain_id, pool_address.into(), sender_addr.into(),
-            contract_address.into(), policy_commitment, token.into(),
-            derive_contract_note_nonce(secret),
+            CONTRACT_NOTE_ID_TAG, sender_addr.into(), contract_address.into(), policy_commitment,
+            token.into(), derive_contract_note_nonce(secret),
         ]
             .span(),
     )
@@ -279,8 +276,6 @@ pub(crate) fn compute_contract_note_id(
 
 /// Computes the hiding amount commitment stored for a contract note.
 pub(crate) fn compute_contract_note_commitment(
-    chain_id: felt252,
-    pool_address: ContractAddress,
     note_id: felt252,
     contract_address: ContractAddress,
     policy_commitment: felt252,
@@ -290,23 +285,14 @@ pub(crate) fn compute_contract_note_commitment(
 ) -> felt252 {
     hash(
         [
-            CONTRACT_NOTE_COMMIT_TAG, chain_id, pool_address.into(), note_id,
-            contract_address.into(), policy_commitment, token.into(), amount.into(),
-            derive_contract_note_blinding(secret),
+            CONTRACT_NOTE_COMMIT_TAG, note_id, contract_address.into(), policy_commitment,
+            token.into(), amount.into(), derive_contract_note_blinding(secret),
         ]
             .span(),
     )
 }
 
-/// Computes a pool- and chain-bound nullifier from a contract note's secret.
-pub(crate) fn compute_contract_note_nullifier(
-    chain_id: felt252, pool_address: ContractAddress, note_id: felt252, secret: felt252,
-) -> felt252 {
-    hash(
-        [
-            CONTRACT_NOTE_NULLIFIER_TAG, chain_id, pool_address.into(), note_id,
-            derive_contract_note_blinding(secret),
-        ]
-            .span(),
-    )
+/// Computes an unlinkable nullifier from a contract note's ID and secret.
+pub(crate) fn compute_contract_note_nullifier(note_id: felt252, secret: felt252) -> felt252 {
+    hash([CONTRACT_NOTE_NULLIFIER_TAG, note_id, derive_contract_note_blinding(secret)].span())
 }

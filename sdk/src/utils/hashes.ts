@@ -114,16 +114,16 @@ export function derive_contract_note_blinding(secret: bigint): bigint {
 }
 
 /** See packages/privacy/src/hashes.cairo for documentation. */
-export function compute_contract_note_id(chain_id: bigint, pool_address: bigint, sender_addr: bigint, contract_address: bigint, policy_commitment: bigint, token: bigint, secret: bigint): bigint {
-  return hash(CONTRACT_NOTE_ID_TAG, chain_id, pool_address, sender_addr, contract_address, policy_commitment, token, derive_contract_note_nonce(secret));
+export function compute_contract_note_id(sender_addr: bigint, contract_address: bigint, policy_commitment: bigint, token: bigint, secret: bigint): bigint {
+  return hash(CONTRACT_NOTE_ID_TAG, sender_addr, contract_address, policy_commitment, token, derive_contract_note_nonce(secret));
 }
 
 /** See packages/privacy/src/hashes.cairo for documentation. */
-export function compute_contract_note_commitment(chain_id: bigint, pool_address: bigint, note_id: bigint, contract_address: bigint, policy_commitment: bigint, token: bigint, amount: bigint, secret: bigint): bigint {
-  return hash(CONTRACT_NOTE_COMMIT_TAG, chain_id, pool_address, note_id, contract_address, policy_commitment, token, amount, derive_contract_note_blinding(secret));
+export function compute_contract_note_commitment(note_id: bigint, contract_address: bigint, policy_commitment: bigint, token: bigint, amount: bigint, secret: bigint): bigint {
+  return hash(CONTRACT_NOTE_COMMIT_TAG, note_id, contract_address, policy_commitment, token, amount, derive_contract_note_blinding(secret));
 }
 
 /** See packages/privacy/src/hashes.cairo for documentation. */
-export function compute_contract_note_nullifier(chain_id: bigint, pool_address: bigint, note_id: bigint, secret: bigint): bigint {
-  return hash(CONTRACT_NOTE_NULLIFIER_TAG, chain_id, pool_address, note_id, derive_contract_note_blinding(secret));
+export function compute_contract_note_nullifier(note_id: bigint, secret: bigint): bigint {
+  return hash(CONTRACT_NOTE_NULLIFIER_TAG, note_id, derive_contract_note_blinding(secret));
 }
