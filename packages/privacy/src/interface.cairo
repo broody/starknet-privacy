@@ -1,6 +1,6 @@
 use privacy::actions::{ClientAction, ServerAction};
 use privacy::objects::{
-    ContractNote, EncChannelInfo, EncOutgoingChannelInfo, EncPrivateKey, EncSubchannelInfo, Note,
+    EncChannelInfo, EncOutgoingChannelInfo, EncPrivateKey, EncSubchannelInfo, EscrowNote, Note,
     OpenNoteScreeningPolicy,
 };
 use privacy::snip12::ScreeningAttestation;
@@ -684,8 +684,8 @@ pub trait IViews<T> {
     /// ([`Note`](privacy::objects::Note)): The note, or a zero struct if the note does not exist.
     fn get_note(self: @T, note_id: felt252) -> Note;
 
-    /// Returns the commitment and controller metadata for a contract-controlled note.
-    fn get_contract_note(self: @T, note_id: felt252) -> ContractNote;
+    /// Returns the commitment and application metadata for an escrow note.
+    fn get_escrow_note(self: @T, note_id: felt252) -> EscrowNote;
 
     /// Checks if a nullifier exists.
     ///
@@ -696,8 +696,8 @@ pub trait IViews<T> {
     /// (`bool`): True if the nullifier exists in the contract, false otherwise.
     fn nullifier_exists(self: @T, nullifier: felt252) -> bool;
 
-    /// Returns whether a contract-note nullifier has already been applied.
-    fn contract_note_nullifier_exists(self: @T, nullifier: felt252) -> bool;
+    /// Returns whether an escrow-note nullifier has already been applied.
+    fn escrow_note_nullifier_exists(self: @T, nullifier: felt252) -> bool;
 
     /// Returns the registered public viewing key of the given user address.
     ///

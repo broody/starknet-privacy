@@ -20,9 +20,9 @@ import {
   compute_enc_sender_addr_hash,
   compute_enc_recipient_addr_hash,
   compute_outgoing_channel_id,
-  compute_contract_note_id,
-  compute_contract_note_commitment,
-  compute_contract_note_nullifier,
+  compute_escrow_note_id,
+  compute_escrow_note_commitment,
+  compute_escrow_note_nullifier,
 } from "../../src/utils/hashes.js";
 import referenceHashes from "../fixtures/cairo-reference-data.json" with { type: "json" };
 
@@ -41,7 +41,7 @@ describe("Hash Compatibility with Cairo", () => {
   const sharedX = BigInt(inputs.sharedX);
   const contractAddress = BigInt(inputs.contractAddress);
   const policyCommitment = BigInt(inputs.policyCommitment);
-  const contractNoteSecret = BigInt(inputs.contractNoteSecret);
+  const escrowNoteSecret = BigInt(inputs.escrowNoteSecret);
 
   it("compute_channel_key matches Cairo", () => {
     const result = compute_channel_key(sender, senderPrivateKey, recipient, recipientPublicKey);
@@ -108,27 +108,27 @@ describe("Hash Compatibility with Cairo", () => {
     expect(result.toString(16)).toBe(BigInt(outputs.outgoingChannelId).toString(16));
   });
 
-  it("contract note hashes match Cairo", () => {
-    const contractNoteId = compute_contract_note_id(
+  it("escrow note hashes match Cairo", () => {
+    const escrowNoteId = compute_escrow_note_id(
       sender,
       contractAddress,
       policyCommitment,
       token,
-      contractNoteSecret
+      escrowNoteSecret
     );
-    expect(contractNoteId.toString(16)).toBe(BigInt(outputs.contractNoteId).toString(16));
+    expect(escrowNoteId.toString(16)).toBe(BigInt(outputs.escrowNoteId).toString(16));
 
-    const noteCommitment = compute_contract_note_commitment(
-      contractNoteId,
+    const noteCommitment = compute_escrow_note_commitment(
+      escrowNoteId,
       contractAddress,
       policyCommitment,
       token,
       BigInt(inputs.amount),
-      contractNoteSecret
+      escrowNoteSecret
     );
-    expect(noteCommitment.toString(16)).toBe(BigInt(outputs.contractNoteCommitment).toString(16));
-    expect(compute_contract_note_nullifier(contractNoteId, contractNoteSecret).toString(16)).toBe(
-      BigInt(outputs.contractNoteNullifier).toString(16)
+    expect(noteCommitment.toString(16)).toBe(BigInt(outputs.escrowNoteCommitment).toString(16));
+    expect(compute_escrow_note_nullifier(escrowNoteId, escrowNoteSecret).toString(16)).toBe(
+      BigInt(outputs.escrowNoteNullifier).toString(16)
     );
   });
 });

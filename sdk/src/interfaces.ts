@@ -197,7 +197,7 @@ export type UseNoteAction = {
 };
 
 /** Private opening used to create a note controlled by an application contract. */
-export type ContractNoteCreation = {
+export type EscrowNoteCreation = {
   contractAddress: StarknetAddress;
   policyCommitment: BigNumberish;
   amount: Amount;
@@ -205,18 +205,18 @@ export type ContractNoteCreation = {
   secret: BigNumberish;
 };
 
-/** Private opening of an existing contract note. */
-export type ContractNoteSpend = {
+/** Private opening of an existing escrow note. */
+export type EscrowNoteSpend = {
   noteId: NoteId;
   amount: Amount;
   secret: BigNumberish;
 };
 
-export type CreateContractNoteAction = ContractNoteCreation & {
+export type CreateEscrowNoteAction = EscrowNoteCreation & {
   token: StarknetAddressBigint;
 };
 
-export type UseContractNoteAction = ContractNoteSpend & {
+export type UseEscrowNoteAction = EscrowNoteSpend & {
   /** Used for local balance planning; the pool verifies the token from committed note state. */
   token: StarknetAddressBigint;
 };
@@ -281,9 +281,9 @@ export type Actions = {
   openTokenChannels?: OpenTokenChannelAction[];
   deposits?: DepositAction[];
   useNotes?: UseNoteAction[];
-  useContractNotes?: UseContractNoteAction[];
+  useEscrowNotes?: UseEscrowNoteAction[];
   createNotes?: CreateNoteAction[];
-  createContractNotes?: CreateContractNoteAction[];
+  createEscrowNotes?: CreateEscrowNoteAction[];
   withdraws?: WithdrawAction[];
   surpluses?: SurplusAction[];
   invoke?: InvokeAction;
@@ -617,11 +617,11 @@ export interface TokenOperationsBuilder {
   inputs(...notes: Note[]): this;
 
   /**
-   * Consume contract notes as private inputs. The same transaction must call `.invoke()` (or
+   * Consume escrow notes as private inputs. The same transaction must call `.invoke()` (or
    * `.computeAndInvoke()`) with the application contract as its target; authorization failure
    * reverts the complete transaction.
    */
-  useContractNote(...notes: ContractNoteSpend[]): this;
+  useEscrowNote(...notes: EscrowNoteSpend[]): this;
 
   /**
    * Deposit this token.
@@ -643,7 +643,7 @@ export interface TokenOperationsBuilder {
    * cryptographically, never publish it, and retain it until spend. The same transaction must invoke
    * the application contract to authorize creation.
    */
-  createContractNote(...outputs: ContractNoteCreation[]): this;
+  createEscrowNote(...outputs: EscrowNoteCreation[]): this;
 
   /**
    * Set the recipient for any surplus for this token.

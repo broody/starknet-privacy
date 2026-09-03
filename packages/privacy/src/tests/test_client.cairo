@@ -2,10 +2,10 @@ use core::num::traits::Zero;
 use core::poseidon::poseidon_hash_span;
 use openzeppelin::security::ReentrancyGuardComponent::Errors as ReentrancyGuardErrors;
 use privacy::actions::{
-    AppendInput, ClientAction, ComputeAndInvokeInput, CreateContractNoteInput, CreateEncNoteInput,
+    AppendInput, ClientAction, ComputeAndInvokeInput, CreateEncNoteInput, CreateEscrowNoteInput,
     CreateOpenNoteInput, DepositInput, InvokeExternalInput, InvokeInput, OpenChannelInput,
     OpenSubchannelInput, ServerAction, SetViewingKeyInput, TransferFromInput, TransferToInput,
-    UseContractNoteInput, UseNoteInput, WithdrawInput,
+    UseEscrowNoteInput, UseNoteInput, WithdrawInput,
 };
 use privacy::hashes::{
     compute_identity_key, compute_note_id, compute_nullifier, compute_subchannel_id,
@@ -93,8 +93,8 @@ fn test_action_enum_discriminants_are_append_only() {
     );
     assert_eq!(
         client_action_variant(
-            ClientAction::CreateContractNote(
-                CreateContractNoteInput {
+            ClientAction::CreateEscrowNote(
+                CreateEscrowNoteInput {
                     contract_address: 1.try_into().unwrap(),
                     policy_commitment: 1,
                     token: 1.try_into().unwrap(),
@@ -107,9 +107,7 @@ fn test_action_enum_discriminants_are_append_only() {
     );
     assert_eq!(
         client_action_variant(
-            ClientAction::UseContractNote(
-                UseContractNoteInput { note_id: 1, amount: 1, secret: 1 },
-            ),
+            ClientAction::UseEscrowNote(UseEscrowNoteInput { note_id: 1, amount: 1, secret: 1 }),
         ),
         11,
     );

@@ -27,7 +27,7 @@ import type {
   EncSubchannelInfo,
   EncOutgoingChannelInfo,
   EncPrivateKey,
-  ContractNote,
+  EscrowNote,
 } from "../internal/pool-contract-interface.js";
 import { AdvancedMap, AddressMap } from "../utils/maps.js";
 import { assert, isOpen } from "../utils/validation.js";
@@ -123,7 +123,7 @@ export class MockPoolContract implements MockContract, PoolContractInterface {
     return this.publicKeys.has(userAddr) ? toBigInt(this.publicKeys.get(userAddr)!) : 0n;
   }
 
-  get_contract_note(_noteId: bigint): ContractNote {
+  get_escrow_note(_noteId: bigint): EscrowNote {
     return {
       note_commitment: 0n,
       contract_address: 0n,
@@ -132,7 +132,7 @@ export class MockPoolContract implements MockContract, PoolContractInterface {
     };
   }
 
-  contract_note_nullifier_exists(_nullifier: bigint): boolean {
+  escrow_note_nullifier_exists(_nullifier: bigint): boolean {
     return false;
   }
 

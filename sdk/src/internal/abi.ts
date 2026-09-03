@@ -249,7 +249,7 @@ export const PrivacyPoolABI = [
   },
   {
     "type": "struct",
-    "name": "privacy::actions::CreateContractNoteInput",
+    "name": "privacy::actions::CreateEscrowNoteInput",
     "members": [
       {
         "name": "contract_address",
@@ -275,7 +275,7 @@ export const PrivacyPoolABI = [
   },
   {
     "type": "struct",
-    "name": "privacy::actions::UseContractNoteInput",
+    "name": "privacy::actions::UseEscrowNoteInput",
     "members": [
       {
         "name": "note_id",
@@ -336,12 +336,12 @@ export const PrivacyPoolABI = [
         "type": "privacy::actions::ComputeAndInvokeInput"
       },
       {
-        "name": "CreateContractNote",
-        "type": "privacy::actions::CreateContractNoteInput"
+        "name": "CreateEscrowNote",
+        "type": "privacy::actions::CreateEscrowNoteInput"
       },
       {
-        "name": "UseContractNote",
-        "type": "privacy::actions::UseContractNoteInput"
+        "name": "UseEscrowNote",
+        "type": "privacy::actions::UseEscrowNoteInput"
       }
     ]
   },
@@ -589,7 +589,7 @@ export const PrivacyPoolABI = [
   },
   {
     "type": "struct",
-    "name": "privacy::events::ContractNoteCreated",
+    "name": "privacy::events::EscrowNoteCreated",
     "members": [
       {
         "name": "note_id",
@@ -615,7 +615,7 @@ export const PrivacyPoolABI = [
   },
   {
     "type": "struct",
-    "name": "privacy::events::ContractNoteUsed",
+    "name": "privacy::events::EscrowNoteUsed",
     "members": [
       {
         "name": "nullifier",
@@ -688,12 +688,12 @@ export const PrivacyPoolABI = [
         "type": "privacy::actions::InvokeInput"
       },
       {
-        "name": "CreateContractNote",
-        "type": "privacy::events::ContractNoteCreated"
+        "name": "CreateEscrowNote",
+        "type": "privacy::events::EscrowNoteCreated"
       },
       {
-        "name": "UseContractNote",
-        "type": "privacy::events::ContractNoteUsed"
+        "name": "UseEscrowNote",
+        "type": "privacy::events::EscrowNoteUsed"
       }
     ]
   },
@@ -903,7 +903,7 @@ export const PrivacyPoolABI = [
   },
   {
     "type": "struct",
-    "name": "privacy::objects::ContractNote",
+    "name": "privacy::objects::EscrowNote",
     "members": [
       {
         "name": "note_commitment",
@@ -1063,7 +1063,7 @@ export const PrivacyPoolABI = [
       },
       {
         "type": "function",
-        "name": "get_contract_note",
+        "name": "get_escrow_note",
         "inputs": [
           {
             "name": "note_id",
@@ -1072,7 +1072,7 @@ export const PrivacyPoolABI = [
         ],
         "outputs": [
           {
-            "type": "privacy::objects::ContractNote"
+            "type": "privacy::objects::EscrowNote"
           }
         ],
         "state_mutability": "view"
@@ -1095,7 +1095,7 @@ export const PrivacyPoolABI = [
       },
       {
         "type": "function",
-        "name": "contract_note_nullifier_exists",
+        "name": "escrow_note_nullifier_exists",
         "inputs": [
           {
             "name": "nullifier",
@@ -2117,7 +2117,7 @@ export const PrivacyPoolABI = [
   },
   {
     "type": "event",
-    "name": "privacy::events::ContractNoteCreated",
+    "name": "privacy::events::EscrowNoteCreated",
     "kind": "struct",
     "members": [
       {
@@ -2149,7 +2149,7 @@ export const PrivacyPoolABI = [
   },
   {
     "type": "event",
-    "name": "privacy::events::ContractNoteUsed",
+    "name": "privacy::events::EscrowNoteUsed",
     "kind": "struct",
     "members": [
       {
@@ -2313,13 +2313,13 @@ export const PrivacyPoolABI = [
         "kind": "nested"
       },
       {
-        "name": "ContractNoteCreated",
-        "type": "privacy::events::ContractNoteCreated",
+        "name": "EscrowNoteCreated",
+        "type": "privacy::events::EscrowNoteCreated",
         "kind": "nested"
       },
       {
-        "name": "ContractNoteUsed",
-        "type": "privacy::events::ContractNoteUsed",
+        "name": "EscrowNoteUsed",
+        "type": "privacy::events::EscrowNoteUsed",
         "kind": "nested"
       },
       {

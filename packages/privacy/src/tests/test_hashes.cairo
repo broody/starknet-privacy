@@ -1,8 +1,8 @@
 use privacy::hashes::{
-    compute_channel_key, compute_channel_marker, compute_contract_note_commitment,
-    compute_contract_note_id, compute_contract_note_nullifier, compute_identity_key,
-    compute_note_id, compute_nullifier, compute_outgoing_channel_id, compute_subchannel_id,
-    compute_subchannel_marker, derive_contract_note_blinding, derive_contract_note_nonce, hash,
+    compute_channel_key, compute_channel_marker, compute_escrow_note_commitment,
+    compute_escrow_note_id, compute_escrow_note_nullifier, compute_identity_key, compute_note_id,
+    compute_nullifier, compute_outgoing_channel_id, compute_subchannel_id,
+    compute_subchannel_marker, derive_escrow_note_blinding, derive_escrow_note_nonce, hash,
 };
 use starkware_utils::constants::MAX_U32;
 
@@ -256,32 +256,32 @@ fn test_compute_nullifier_different_inputs() {
 }
 
 #[test]
-fn test_compute_contract_note_id_different_inputs() {
+fn test_compute_escrow_note_id_different_inputs() {
     let sender_addr = hash(['SENDER_ADDR'].span()).try_into().unwrap();
     let contract_address = hash(['CONTRACT_ADDRESS'].span()).try_into().unwrap();
     let policy_commitment = hash(['POLICY_COMMITMENT'].span());
     let token = hash(['TOKEN'].span()).try_into().unwrap();
     let secret = hash(['SECRET'].span());
-    let note_id = compute_contract_note_id(
+    let note_id = compute_escrow_note_id(
         :sender_addr, :contract_address, :policy_commitment, :token, :secret,
     );
     let other_sender_addr = hash(['OTHER_SENDER_ADDR'].span()).try_into().unwrap();
     let other_secret = hash(['OTHER_SECRET'].span());
     assert_ne!(
         note_id,
-        compute_contract_note_id(
+        compute_escrow_note_id(
             sender_addr: other_sender_addr, :contract_address, :policy_commitment, :token, :secret,
         ),
     );
     assert_ne!(
         note_id,
-        compute_contract_note_id(
+        compute_escrow_note_id(
             :sender_addr, :contract_address, :policy_commitment, :token, secret: other_secret,
         ),
     );
     assert_ne!(
         note_id,
-        compute_contract_note_id(
+        compute_escrow_note_id(
             :sender_addr,
             contract_address: hash(['OTHER_CONTRACT_ADDRESS'].span()).try_into().unwrap(),
             :policy_commitment,
@@ -291,7 +291,7 @@ fn test_compute_contract_note_id_different_inputs() {
     );
     assert_ne!(
         note_id,
-        compute_contract_note_id(
+        compute_escrow_note_id(
             :sender_addr,
             :contract_address,
             policy_commitment: hash(['OTHER_POLICY_COMMITMENT'].span()),
@@ -301,7 +301,7 @@ fn test_compute_contract_note_id_different_inputs() {
     );
     assert_ne!(
         note_id,
-        compute_contract_note_id(
+        compute_escrow_note_id(
             :sender_addr,
             :contract_address,
             :policy_commitment,
@@ -312,31 +312,31 @@ fn test_compute_contract_note_id_different_inputs() {
 }
 
 #[test]
-fn test_contract_note_secret_derivations_are_domain_separated() {
+fn test_escrow_note_secret_derivations_are_domain_separated() {
     let secret = hash(['SECRET'].span());
-    assert_ne!(derive_contract_note_nonce(secret), derive_contract_note_blinding(secret));
+    assert_ne!(derive_escrow_note_nonce(secret), derive_escrow_note_blinding(secret));
 }
 
 #[test]
-fn test_compute_contract_note_commitment_hides_amount_and_secret() {
+fn test_compute_escrow_note_commitment_hides_amount_and_secret() {
     let note_id = hash(['NOTE_ID'].span());
     let contract_address = hash(['CONTRACT_ADDRESS'].span()).try_into().unwrap();
     let policy_commitment = hash(['POLICY_COMMITMENT'].span());
     let token = hash(['TOKEN'].span()).try_into().unwrap();
     let amount: u128 = 42;
     let secret = hash(['SECRET'].span());
-    let commitment = compute_contract_note_commitment(
+    let commitment = compute_escrow_note_commitment(
         :note_id, :contract_address, :policy_commitment, :token, :amount, :secret,
     );
     assert_ne!(
         commitment,
-        compute_contract_note_commitment(
+        compute_escrow_note_commitment(
             :note_id, :contract_address, :policy_commitment, :token, amount: amount + 1, :secret,
         ),
     );
     assert_ne!(
         commitment,
-        compute_contract_note_commitment(
+        compute_escrow_note_commitment(
             :note_id,
             :contract_address,
             :policy_commitment,
@@ -348,14 +348,14 @@ fn test_compute_contract_note_commitment_hides_amount_and_secret() {
 }
 
 #[test]
-fn test_compute_contract_note_nullifier_depends_on_note_and_secret() {
+fn test_compute_escrow_note_nullifier_depends_on_note_and_secret() {
     let note_id = hash(['NOTE_ID'].span());
     let secret = hash(['SECRET'].span());
-    let nullifier = compute_contract_note_nullifier(:note_id, :secret);
+    let nullifier = compute_escrow_note_nullifier(:note_id, :secret);
     assert_ne!(
-        nullifier, compute_contract_note_nullifier(note_id: hash(['OTHER_NOTE'].span()), :secret),
+        nullifier, compute_escrow_note_nullifier(note_id: hash(['OTHER_NOTE'].span()), :secret),
     );
     assert_ne!(
-        nullifier, compute_contract_note_nullifier(:note_id, secret: hash(['OTHER_SECRET'].span())),
+        nullifier, compute_escrow_note_nullifier(:note_id, secret: hash(['OTHER_SECRET'].span())),
     );
 }

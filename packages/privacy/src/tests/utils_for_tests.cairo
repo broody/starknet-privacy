@@ -31,8 +31,8 @@ use privacy::interface::{
     IViewsDispatcher, IViewsDispatcherTrait, IViewsSafeDispatcher, IViewsSafeDispatcherTrait,
 };
 use privacy::objects::{
-    ContractNote, EncChannelInfo, EncOutgoingChannelInfo, EncPrivateKey, EncSubchannelInfo,
-    EncUserAddr, Note, OpenNoteDeposit, OpenNoteScreeningPolicy, TokenBalances, TokenBalancesTrait,
+    EncChannelInfo, EncOutgoingChannelInfo, EncPrivateKey, EncSubchannelInfo, EncUserAddr,
+    EscrowNote, Note, OpenNoteDeposit, OpenNoteScreeningPolicy, TokenBalances, TokenBalancesTrait,
 };
 use privacy::privacy::Privacy;
 use privacy::privacy::Privacy::{ClientInternalTrait, deploy_for_test as deploy_privacy_for_test};
@@ -2132,12 +2132,12 @@ pub(crate) impl PrivacyCfgImpl of PrivacyCfgTrait {
         self.views.get_proof_validity_blocks()
     }
 
-    fn get_contract_note(self: @PrivacyCfg, note_id: felt252) -> ContractNote {
-        self.views.get_contract_note(:note_id)
+    fn get_escrow_note(self: @PrivacyCfg, note_id: felt252) -> EscrowNote {
+        self.views.get_escrow_note(:note_id)
     }
 
-    fn contract_note_nullifier_exists(self: @PrivacyCfg, nullifier: felt252) -> bool {
-        self.views.contract_note_nullifier_exists(:nullifier)
+    fn escrow_note_nullifier_exists(self: @PrivacyCfg, nullifier: felt252) -> bool {
+        self.views.escrow_note_nullifier_exists(:nullifier)
     }
 
     fn wrap_inputs_into_calls(
@@ -2615,7 +2615,7 @@ pub(crate) fn deploy_mock_compute(
     contract_address
 }
 
-/// Deploys a contract-note callback target bound to `pool_address`.
+/// Deploys an escrow-note callback target bound to `pool_address`.
 pub(crate) fn deploy_mock_note_controller(
     pool_address: ContractAddress, allowed: bool, salt: felt252,
 ) -> ContractAddress {

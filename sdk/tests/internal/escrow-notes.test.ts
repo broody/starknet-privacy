@@ -11,7 +11,7 @@ function clientActions(calldata: unknown): ClientAction[] {
   return JSON.parse((calldata as string[])[2], bigintReviver) as ClientAction[];
 }
 
-describe("contract note builder", () => {
+describe("escrow note builder", () => {
   it("compiles creation with a private secret and an atomic contract invoke", async () => {
     const { env, transfers } = createTestEnv();
 
@@ -19,7 +19,7 @@ describe("contract note builder", () => {
       .build()
       .with(env.ace)
       .deposit({ amount: 37n })
-      .createContractNote({
+      .createEscrowNote({
         contractAddress: CONTROLLER,
         policyCommitment: 91n,
         amount: 37n,
@@ -32,7 +32,7 @@ describe("contract note builder", () => {
     expect(clientActions(result.invocation.calldata)).toEqual([
       { type: "Deposit", input: { token: toBigInt(env.ace), amount: 37n } },
       {
-        type: "CreateContractNote",
+        type: "CreateEscrowNote",
         input: {
           contract_address: 0xabcn,
           policy_commitment: 91n,
@@ -48,20 +48,20 @@ describe("contract note builder", () => {
     ]);
   });
 
-  it("compiles a contract-note spend before outputs and the contract invoke", async () => {
+  it("compiles an escrow-note spend before outputs and the contract invoke", async () => {
     const { env, transfers } = createTestEnv();
 
     const result = await transfers.alice
       .build()
       .with(env.ace)
-      .useContractNote({ noteId: 123n, amount: 37n, secret: 456n })
+      .useEscrowNote({ noteId: 123n, amount: 37n, secret: 456n })
       .withdraw({ recipient: env.alice.address, amount: 37n })
       .done()
       .invoke(() => ({ contractAddress: CONTROLLER, calldata: [] }))
       .createProofInvocation();
 
     expect(clientActions(result.invocation.calldata).map((action) => action.type)).toEqual([
-      "UseContractNote",
+      "UseEscrowNote",
       "Withdraw",
       "InvokeExternal",
     ]);
@@ -73,7 +73,7 @@ describe("contract note builder", () => {
       .build()
       .with(env.ace)
       .deposit({ amount: 37n })
-      .createContractNote({
+      .createEscrowNote({
         contractAddress: CONTROLLER,
         policyCommitment: 91n,
         amount: 37n,
@@ -81,14 +81,14 @@ describe("contract note builder", () => {
       });
 
     await expect(withoutInvoke.createProofInvocation()).rejects.toThrow(
-      "Contract-note creation and spend require .invoke() or .computeAndInvoke()"
+      "Escrow-note creation and spend require .invoke() or .computeAndInvoke()"
     );
 
     const wrongTarget = transfers.alice
       .build()
       .with(env.ace)
       .deposit({ amount: 37n })
-      .createContractNote({
+      .createEscrowNote({
         contractAddress: CONTROLLER,
         policyCommitment: 91n,
         amount: 37n,
@@ -98,7 +98,7 @@ describe("contract note builder", () => {
       .invoke(() => ({ contractAddress: OTHER_CONTROLLER, calldata: [] }));
 
     await expect(wrongTarget.createProofInvocation()).rejects.toThrow(
-      "The invoke target must match the contract of created contract notes"
+      "The invoke target must match the contract of created escrow notes"
     );
   });
 });

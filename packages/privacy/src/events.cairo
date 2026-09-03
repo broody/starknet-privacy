@@ -107,7 +107,7 @@ pub struct NoteUsed {
 }
 
 #[derive(Serde, Copy, Debug, Drop, PartialEq, starknet::Event)]
-pub struct ContractNoteCreated {
+pub struct EscrowNoteCreated {
     /// The note ID.
     #[key]
     pub note_id: felt252,
@@ -117,15 +117,15 @@ pub struct ContractNoteCreated {
     /// The application-specific policy commitment.
     #[key]
     pub policy_commitment: felt252,
-    /// The note's token. Contract-note token types are intentionally public to the contract.
+    /// The note's token. Escrow-note token types are intentionally public to the contract.
     pub token: ContractAddress,
     /// Hiding commitment to the private amount and blinding.
     pub note_commitment: felt252,
 }
 
 #[derive(Serde, Copy, Debug, Drop, PartialEq, starknet::Event)]
-pub struct ContractNoteUsed {
-    /// Secret-derived nullifier of the used contract note. This does not reveal its note ID.
+pub struct EscrowNoteUsed {
+    /// Secret-derived nullifier of the used escrow note. This does not reveal its note ID.
     #[key]
     pub nullifier: felt252,
     /// The address of the application contract that authorized the spend.

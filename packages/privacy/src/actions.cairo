@@ -144,9 +144,9 @@ pub(crate) impl CreateOpenNoteInputValid of InputValidation<CreateOpenNoteInput>
     }
 }
 
-/// Input for the `CreateContractNote` action.
+/// Input for the `CreateEscrowNote` action.
 #[derive(Serde, Copy, Drop, PartialEq, Debug)]
-pub struct CreateContractNoteInput {
+pub struct CreateEscrowNoteInput {
     /// The address of the contract controlling spend authority.
     pub contract_address: ContractAddress,
     /// The application-specific policy commitment.
@@ -159,16 +159,16 @@ pub struct CreateContractNoteInput {
     pub secret: felt252,
 }
 
-pub(crate) impl CreateContractNoteInputValid of InputValidation<CreateContractNoteInput> {
-    fn assert_valid(self: CreateContractNoteInput) {
-        let CreateContractNoteInput {
+pub(crate) impl CreateEscrowNoteInputValid of InputValidation<CreateEscrowNoteInput> {
+    fn assert_valid(self: CreateEscrowNoteInput) {
+        let CreateEscrowNoteInput {
             contract_address, policy_commitment, token, amount, secret,
         } = self;
         assert(contract_address.is_non_zero(), errors::ZERO_CONTRACT_ADDRESS);
         assert(policy_commitment.is_non_zero(), errors::ZERO_POLICY_COMMITMENT);
         assert(token.is_non_zero(), errors::ZERO_TOKEN);
         assert(amount.is_non_zero(), errors::ZERO_AMOUNT);
-        assert(secret.is_non_zero(), errors::ZERO_CONTRACT_NOTE_SECRET);
+        assert(secret.is_non_zero(), errors::ZERO_ESCROW_NOTE_SECRET);
     }
 }
 
@@ -207,10 +207,10 @@ pub(crate) impl UseNoteInputValid of InputValidation<UseNoteInput> {
     }
 }
 
-/// Input for the `UseContractNote` action.
+/// Input for the `UseEscrowNote` action.
 #[derive(Serde, Copy, Drop, PartialEq, Debug)]
-pub struct UseContractNoteInput {
-    /// Identifier emitted when the contract note was created.
+pub struct UseEscrowNoteInput {
+    /// Identifier emitted when the escrow note was created.
     pub note_id: felt252,
     /// Private amount opening.
     pub amount: u128,
@@ -218,12 +218,12 @@ pub struct UseContractNoteInput {
     pub secret: felt252,
 }
 
-pub(crate) impl UseContractNoteInputValid of InputValidation<UseContractNoteInput> {
-    fn assert_valid(self: UseContractNoteInput) {
-        let UseContractNoteInput { note_id, amount, secret } = self;
+pub(crate) impl UseEscrowNoteInputValid of InputValidation<UseEscrowNoteInput> {
+    fn assert_valid(self: UseEscrowNoteInput) {
+        let UseEscrowNoteInput { note_id, amount, secret } = self;
         assert(note_id.is_non_zero(), errors::ZERO_NOTE_ID);
         assert(amount.is_non_zero(), errors::ZERO_AMOUNT);
-        assert(secret.is_non_zero(), errors::ZERO_CONTRACT_NOTE_SECRET);
+        assert(secret.is_non_zero(), errors::ZERO_ESCROW_NOTE_SECRET);
     }
 }
 
@@ -320,9 +320,9 @@ pub enum ClientAction {
     /// `InvokeWithComputation` action.
     ComputeAndInvoke: ComputeAndInvokeInput,
     /// Creates a confidential note locked to an atomically invoked application contract.
-    CreateContractNote: CreateContractNoteInput,
-    /// Opens and consumes a contract note, subject to that contract's atomic authorization.
-    UseContractNote: UseContractNoteInput,
+    CreateEscrowNote: CreateEscrowNoteInput,
+    /// Opens and consumes an escrow note, subject to that contract's atomic authorization.
+    UseEscrowNote: UseEscrowNoteInput,
 }
 
 #[generate_trait]
@@ -345,9 +345,9 @@ pub(crate) impl ClientActionImpl of ClientActionTrait {
             ClientAction::Deposit(_) => Self::DEPOSIT_PHASE,
             ClientAction::CreateEncNote(_) => Self::CREATE_NOTES_PHASE,
             ClientAction::CreateOpenNote(_) => Self::CREATE_NOTES_PHASE,
-            ClientAction::CreateContractNote(_) => Self::CREATE_NOTES_PHASE,
+            ClientAction::CreateEscrowNote(_) => Self::CREATE_NOTES_PHASE,
             ClientAction::UseNote(_) => Self::USE_NOTES_PHASE,
-            ClientAction::UseContractNote(_) => Self::USE_NOTES_PHASE,
+            ClientAction::UseEscrowNote(_) => Self::USE_NOTES_PHASE,
             ClientAction::Withdraw(_) => Self::WITHDRAW_PHASE,
             ClientAction::InvokeExternal(_) => Self::INVOKE_PHASE,
             ClientAction::ComputeAndInvoke(_) => Self::INVOKE_PHASE,
@@ -451,8 +451,8 @@ pub enum ServerAction {
     /// *NOTE:* The target selector should assert the caller is the privacy contract,
     /// otherwise anyone could invoke it directly and bypass the privacy pool.
     InvokeWithComputation: InvokeInput,
-    /// Store and emit a contract-note creation. Appended to preserve all existing discriminants.
-    CreateContractNote: events::ContractNoteCreated,
-    /// Nullify and emit a contract-note spend. Appended to preserve existing discriminants.
-    UseContractNote: events::ContractNoteUsed,
+    /// Store and emit an escrow-note creation. Appended to preserve all existing discriminants.
+    CreateEscrowNote: events::EscrowNoteCreated,
+    /// Nullify and emit an escrow-note spend. Appended to preserve existing discriminants.
+    UseEscrowNote: events::EscrowNoteUsed,
 }

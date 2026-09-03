@@ -8,10 +8,10 @@ use core::poseidon::poseidon_hash_span;
 use privacy::actions::{ServerAction, WriteOnceInput};
 use privacy::hashes::domain_separation::*;
 use privacy::hashes::{
-    compute_channel_key, compute_channel_marker, compute_contract_note_commitment,
-    compute_contract_note_id, compute_contract_note_nullifier, compute_enc_amount_hash,
+    compute_channel_key, compute_channel_marker, compute_enc_amount_hash,
     compute_enc_channel_key_hash, compute_enc_private_key_hash, compute_enc_recipient_addr_hash,
-    compute_enc_sender_addr_hash, compute_enc_token_hash, compute_note_id, compute_nullifier,
+    compute_enc_sender_addr_hash, compute_enc_token_hash, compute_escrow_note_commitment,
+    compute_escrow_note_id, compute_escrow_note_nullifier, compute_note_id, compute_nullifier,
     compute_outgoing_channel_id, compute_subchannel_id, compute_subchannel_marker,
 };
 use privacy::utils::constants::{VIRTUAL_SNOS, VIRTUAL_SNOS0};
@@ -40,7 +40,7 @@ const USER_ADDR: felt252 = 0x999;
 const USER_PRIVATE_KEY: felt252 = 0x888;
 const CONTRACT_ADDRESS: felt252 = 0x3333;
 const POLICY_COMMITMENT: felt252 = 0x5555;
-const CONTRACT_NOTE_SECRET: felt252 = 0x6666;
+const ESCROW_NOTE_SECRET: felt252 = 0x6666;
 
 fn to_address(addr: felt252) -> ContractAddress {
     addr.try_into().unwrap()
@@ -66,23 +66,23 @@ fn generate_reference_hashes() {
     );
     let note_id = compute_note_id(CHANNEL_KEY, token, INDEX);
     let nullifier = compute_nullifier(CHANNEL_KEY, token, INDEX, SENDER_PRIVATE_KEY);
-    let contract_note_id = compute_contract_note_id(
+    let escrow_note_id = compute_escrow_note_id(
         sender_addr: sender,
         contract_address: to_address(CONTRACT_ADDRESS),
         policy_commitment: POLICY_COMMITMENT,
         token: token,
-        secret: CONTRACT_NOTE_SECRET,
+        secret: ESCROW_NOTE_SECRET,
     );
-    let contract_note_commitment = compute_contract_note_commitment(
-        note_id: contract_note_id,
+    let escrow_note_commitment = compute_escrow_note_commitment(
+        note_id: escrow_note_id,
         contract_address: to_address(CONTRACT_ADDRESS),
         policy_commitment: POLICY_COMMITMENT,
         token: token,
         amount: AMOUNT,
-        secret: CONTRACT_NOTE_SECRET,
+        secret: ESCROW_NOTE_SECRET,
     );
-    let contract_note_nullifier = compute_contract_note_nullifier(
-        note_id: contract_note_id, secret: CONTRACT_NOTE_SECRET,
+    let escrow_note_nullifier = compute_escrow_note_nullifier(
+        note_id: escrow_note_id, secret: ESCROW_NOTE_SECRET,
     );
 
     // Outgoing channel id
@@ -155,7 +155,7 @@ fn generate_reference_hashes() {
     println!("inputs.userPrivateKey: 0x{:x}", USER_PRIVATE_KEY);
     println!("inputs.contractAddress: 0x{:x}", CONTRACT_ADDRESS);
     println!("inputs.policyCommitment: 0x{:x}", POLICY_COMMITMENT);
-    println!("inputs.contractNoteSecret: 0x{:x}", CONTRACT_NOTE_SECRET);
+    println!("inputs.escrowNoteSecret: 0x{:x}", ESCROW_NOTE_SECRET);
 
     // Outputs (computed hashes)
     println!("outputs.channelKey: 0x{:x}", channel_key);
@@ -171,9 +171,9 @@ fn generate_reference_hashes() {
     println!("outputs.encSenderAddrHash: 0x{:x}", enc_sender_addr_hash);
     println!("outputs.encRecipientAddrHash: 0x{:x}", enc_recipient_addr_hash);
     println!("outputs.outgoingChannelId: 0x{:x}", outgoing_channel_id);
-    println!("outputs.contractNoteId: 0x{:x}", contract_note_id);
-    println!("outputs.contractNoteCommitment: 0x{:x}", contract_note_commitment);
-    println!("outputs.contractNoteNullifier: 0x{:x}", contract_note_nullifier);
+    println!("outputs.escrowNoteId: 0x{:x}", escrow_note_id);
+    println!("outputs.escrowNoteCommitment: 0x{:x}", escrow_note_commitment);
+    println!("outputs.escrowNoteNullifier: 0x{:x}", escrow_note_nullifier);
 
     // Encryption outputs
     println!("outputs.encSubchannelSalt: 0x{:x}", enc_subchannel.salt);

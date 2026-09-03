@@ -54,12 +54,12 @@ type ClientActions = {
   openTokenChannels: Extract<ClientAction, { type: "OpenSubchannel" }>[];
   deposits: Extract<ClientAction, { type: "Deposit" }>[];
   useNotes: Extract<ClientAction, { type: "UseNote" }>[];
-  useContractNotes: Extract<ClientAction, { type: "UseContractNote" }>[];
+  useEscrowNotes: Extract<ClientAction, { type: "UseEscrowNote" }>[];
   createNotes: (
     | Extract<ClientAction, { type: "CreateEncNote" }>
     | Extract<ClientAction, { type: "CreateOpenNote" }>
   )[];
-  createContractNotes: Extract<ClientAction, { type: "CreateContractNote" }>[];
+  createEscrowNotes: Extract<ClientAction, { type: "CreateEscrowNote" }>[];
   withdraws: Extract<ClientAction, { type: "Withdraw" }>[];
   invoke?: Extract<ClientAction, { type: "InvokeExternal" }>;
   computeAndInvoke?: Extract<ClientAction, { type: "ComputeAndInvoke" }>;
@@ -235,9 +235,9 @@ export class ActionCompiler {
       openTokenChannels: [],
       deposits: [],
       useNotes: [],
-      useContractNotes: [],
+      useEscrowNotes: [],
       createNotes: [],
-      createContractNotes: [],
+      createEscrowNotes: [],
       withdraws: [],
       invoke: undefined,
       computeAndInvoke: undefined,
@@ -393,22 +393,22 @@ export class ActionCompiler {
       }
     }
 
-    if (actions.useContractNotes) {
-      for (const action of actions.useContractNotes) {
+    if (actions.useEscrowNotes) {
+      for (const action of actions.useEscrowNotes) {
         const noteId = toBigInt(action.noteId);
         const secret = toBigInt(action.secret);
-        assert(noteId !== 0n, () => "Contract note ID must be non-zero");
-        assert(action.amount > 0n, () => "Contract note amount must be positive");
-        assert(secret !== 0n, () => "Contract note secret must be non-zero");
+        assert(noteId !== 0n, () => "Escrow note ID must be non-zero");
+        assert(action.amount > 0n, () => "Escrow note amount must be positive");
+        assert(secret !== 0n, () => "Escrow note secret must be non-zero");
         const input = {
-          type: "UseContractNote",
+          type: "UseEscrowNote",
           input: {
             note_id: noteId,
             amount: action.amount,
             secret,
           },
         } as const;
-        execute(input, clientActions.useContractNotes);
+        execute(input, clientActions.useEscrowNotes);
       }
     }
 
@@ -452,18 +452,18 @@ export class ActionCompiler {
       }
     }
 
-    if (actions.createContractNotes) {
-      for (const action of actions.createContractNotes) {
+    if (actions.createEscrowNotes) {
+      for (const action of actions.createEscrowNotes) {
         const contractAddress = toBigInt(action.contractAddress);
         const policyCommitment = toBigInt(action.policyCommitment);
         const secret = toBigInt(action.secret);
         assert(contractAddress !== 0n, () => "Contract address must be non-zero");
         assert(policyCommitment !== 0n, () => "Policy commitment must be non-zero");
-        assert(action.token !== 0n, () => "Contract note token must be non-zero");
-        assert(action.amount > 0n, () => "Contract note amount must be positive");
-        assert(secret !== 0n, () => "Contract note secret must be non-zero");
+        assert(action.token !== 0n, () => "Escrow note token must be non-zero");
+        assert(action.amount > 0n, () => "Escrow note amount must be positive");
+        assert(secret !== 0n, () => "Escrow note secret must be non-zero");
         const input = {
-          type: "CreateContractNote",
+          type: "CreateEscrowNote",
           input: {
             contract_address: contractAddress,
             policy_commitment: policyCommitment,
@@ -472,7 +472,7 @@ export class ActionCompiler {
             secret,
           },
         } as const;
-        execute(input, clientActions.createContractNotes);
+        execute(input, clientActions.createEscrowNotes);
       }
     }
 
@@ -494,17 +494,20 @@ export class ActionCompiler {
 
     // surpluses were handled in resolveNotes
 
-    const contractTargets = new Set(
-      (actions.createContractNotes ?? []).map((note) => toBigInt(note.contractAddress))
+    const escrowContractTargets = new Set(
+      (actions.createEscrowNotes ?? []).map((note) => toBigInt(note.contractAddress))
     );
-    assert(contractTargets.size <= 1, () => "A transaction may target only one note contract");
-    const hasContractNoteActions =
-      (actions.useContractNotes?.length ?? 0) > 0 || (actions.createContractNotes?.length ?? 0) > 0;
     assert(
-      !hasContractNoteActions ||
+      escrowContractTargets.size <= 1,
+      () => "A transaction may target only one escrow application contract"
+    );
+    const hasEscrowNoteActions =
+      (actions.useEscrowNotes?.length ?? 0) > 0 || (actions.createEscrowNotes?.length ?? 0) > 0;
+    assert(
+      !hasEscrowNoteActions ||
         actions.invoke !== undefined ||
         actions.computeAndInvoke !== undefined,
-      () => "Contract-note creation and spend require .invoke() or .computeAndInvoke()"
+      () => "Escrow-note creation and spend require .invoke() or .computeAndInvoke()"
     );
 
     // `invoke` and `computeAndInvoke` share the single invoke phase the pool allows per
@@ -519,10 +522,10 @@ export class ActionCompiler {
     if (actions.invoke) {
       const call = actions.invoke.callBuilder(this.invokeBuilderArgs(clientActions, pool));
       const target = toBigInt(call.contractAddress);
-      const createdContractNoteTarget = contractTargets.values().next().value;
+      const createdEscrowNoteTarget = escrowContractTargets.values().next().value;
       assert(
-        createdContractNoteTarget === undefined || target === createdContractNoteTarget,
-        () => "The invoke target must match the contract of created contract notes"
+        createdEscrowNoteTarget === undefined || target === createdEscrowNoteTarget,
+        () => "The invoke target must match the contract of created escrow notes"
       );
       const calldata = CallData.compile(call.calldata ?? []).map(toBigInt);
 
@@ -542,10 +545,10 @@ export class ActionCompiler {
         this.invokeBuilderArgs(clientActions, pool)
       );
       const target = toBigInt(details.contractAddress);
-      const createdContractNoteTarget = contractTargets.values().next().value;
+      const createdEscrowNoteTarget = escrowContractTargets.values().next().value;
       assert(
-        createdContractNoteTarget === undefined || target === createdContractNoteTarget,
-        () => "The invoke target must match the contract of created contract notes"
+        createdEscrowNoteTarget === undefined || target === createdEscrowNoteTarget,
+        () => "The invoke target must match the contract of created escrow notes"
       );
       const compute_additional_data = CallData.compile(details.computeAdditionalData ?? []).map(
         toBigInt
@@ -706,10 +709,10 @@ export class ActionCompiler {
     }
 
     // The token is local planning metadata. The pool reads and verifies it from the committed
-    // contract note when compiling the private transaction.
-    if (actions.useContractNotes) {
-      for (const note of actions.useContractNotes) {
-        assert(note.amount > 0n, () => `Contract note ${note.noteId}: amount must be positive`);
+    // escrow note when compiling the private transaction.
+    if (actions.useEscrowNotes) {
+      for (const note of actions.useEscrowNotes) {
+        assert(note.amount > 0n, () => `Escrow note ${note.noteId}: amount must be positive`);
         update(note.token, note.amount);
       }
     }
@@ -735,9 +738,9 @@ export class ActionCompiler {
       }
     }
 
-    if (actions.createContractNotes) {
-      for (const note of actions.createContractNotes) {
-        assert(note.amount > 0n, () => `Contract note amount must be positive`);
+    if (actions.createEscrowNotes) {
+      for (const note of actions.createEscrowNotes) {
+        assert(note.amount > 0n, () => `Escrow note amount must be positive`);
         update(note.token, -note.amount);
       }
     }

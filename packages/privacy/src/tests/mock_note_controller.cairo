@@ -1,6 +1,6 @@
-//! Contract-note callback used to exercise contract-note authorization and context binding.
+//! Escrow-note callback used to exercise escrow-note authorization and context binding.
 
-use privacy::objects::{ContractNoteContext, OpenNoteDeposit};
+use privacy::objects::{EscrowNoteContext, OpenNoteDeposit};
 use starknet::ClassHash;
 
 #[starknet::interface]
@@ -12,8 +12,8 @@ pub trait IMockNoteController<T> {
     fn last_actions_hash(self: @T) -> felt252;
     fn last_created_note_id(self: @T) -> felt252;
     fn last_spent_nullifier(self: @T) -> felt252;
-    fn privacy_contract_note_invoke(
-        ref self: T, context: ContractNoteContext, marker: felt252,
+    fn privacy_escrow_note_invoke(
+        ref self: T, context: EscrowNoteContext, marker: felt252,
     ) -> Span<OpenNoteDeposit>;
 }
 
@@ -21,14 +21,14 @@ pub trait IMockNoteController<T> {
 pub mod MockNoteController {
     use core::num::traits::Zero;
     use privacy::actions::ServerAction;
-    use privacy::objects::{ContractNoteContext, OpenNoteDeposit};
-    use privacy::utils::validate_contract_note_context;
+    use privacy::objects::{EscrowNoteContext, OpenNoteDeposit};
+    use privacy::utils::validate_escrow_note_context;
     use starknet::storage::{StoragePointerReadAccess, StoragePointerWriteAccess};
     use starknet::syscalls::replace_class_syscall;
     use starknet::{ClassHash, ContractAddress, SyscallResultTrait, get_caller_address};
     use super::IMockNoteController;
 
-    pub const CALLBACK_MARKER: felt252 = 'CONTRACT_NOTE_CALLBACK';
+    pub const CALLBACK_MARKER: felt252 = 'ESCROW_NOTE_CALLBACK';
     pub const CONTROLLER_DENIED: felt252 = 'CONTROLLER_DENIED';
     pub const WRONG_ACTIONS_HASH: felt252 = 'WRONG_ACTIONS_HASH';
 
@@ -79,8 +79,8 @@ pub mod MockNoteController {
             self.last_spent_nullifier.read()
         }
 
-        fn privacy_contract_note_invoke(
-            ref self: ContractState, context: ContractNoteContext, marker: felt252,
+        fn privacy_escrow_note_invoke(
+            ref self: ContractState, context: EscrowNoteContext, marker: felt252,
         ) -> Span<OpenNoteDeposit> {
             let pool_address = get_caller_address();
             assert(pool_address == self.pool_address.read(), 'CALLER_NOT_POOL');
@@ -91,7 +91,7 @@ pub mod MockNoteController {
             if expected_actions_hash.is_non_zero() {
                 assert(context.actions_hash == expected_actions_hash, WRONG_ACTIONS_HASH);
             }
-            let actions = validate_contract_note_context(context);
+            let actions = validate_escrow_note_context(context);
 
             let mut created_count: usize = 0;
             let mut spent_count: usize = 0;
@@ -99,11 +99,11 @@ pub mod MockNoteController {
             let mut spent_nullifier: felt252 = Zero::zero();
             for action in actions {
                 match *action {
-                    ServerAction::CreateContractNote(event) => {
+                    ServerAction::CreateEscrowNote(event) => {
                         created_count += 1;
                         created_note_id = event.note_id;
                     },
-                    ServerAction::UseContractNote(event) => {
+                    ServerAction::UseEscrowNote(event) => {
                         spent_count += 1;
                         spent_nullifier = event.nullifier;
                     },

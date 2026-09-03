@@ -137,7 +137,7 @@ pub struct OpenNoteDeposit {
 
 /// A confidential note whose spend policy is enforced by a contract callback.
 #[derive(Serde, Copy, Drop, PartialEq, Debug, starknet::Store)]
-pub struct ContractNote {
+pub struct EscrowNote {
     /// Hiding commitment to the note amount and its secret-derived blinding.
     pub note_commitment: felt252,
     /// Contract that must authorize creation and every spend.
@@ -148,12 +148,12 @@ pub struct ContractNote {
     pub token: ContractAddress,
 }
 
-/// Pool-derived context prepended to a contract-note callback's calldata.
+/// Pool-derived context prepended to an escrow-note callback's calldata.
 ///
 /// `actions_hash` commits to the exact proven server-action list. Application contracts should bind
 /// their policy decision to this value whenever output disposition matters.
 #[derive(Serde, Copy, Drop, PartialEq, Debug)]
-pub struct ContractNoteContext {
+pub struct EscrowNoteContext {
     pub actions_hash: felt252,
     /// Canonical Serde encoding of the exact `Span<ServerAction>` committed by `actions_hash`.
     /// Contracts can deserialize this to enforce output disposition without a prior state write.

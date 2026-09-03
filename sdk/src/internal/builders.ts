@@ -4,7 +4,7 @@
 
 import {
   type CreateNoteAction,
-  type CreateContractNoteAction,
+  type CreateEscrowNoteAction,
   type DepositAction,
   type ExecuteOptions,
   type ExecuteResult,
@@ -19,7 +19,7 @@ import {
   type StarknetAddressBigint,
   type TokenOperationsBuilder,
   type UseNoteAction,
-  type UseContractNoteAction,
+  type UseEscrowNoteAction,
   type WithdrawAction,
   type WithdrawOutput,
   type DepositInput,
@@ -32,8 +32,8 @@ import {
   type InvokeCalldataBuilderArgs,
   type SimulateOptions,
   type ShadowAccountsBuilder,
-  type ContractNoteCreation,
-  type ContractNoteSpend,
+  type EscrowNoteCreation,
+  type EscrowNoteSpend,
   type ViewingKey,
   Open,
   PrivateTransfersInterface,
@@ -50,10 +50,10 @@ export class TokenOperationsBuilderImpl implements TokenOperationsBuilder {
   // Actions stored without context - context resolved during execute
   public openTokenChannels: OpenTokenChannelAction[] = [];
   public useNotes: UseNoteAction[] = [];
-  public useContractNotes: UseContractNoteAction[] = [];
+  public useEscrowNotes: UseEscrowNoteAction[] = [];
   public deposits: DepositAction[] = [];
   public createNotes: CreateNoteAction[] = [];
-  public createContractNotes: CreateContractNoteAction[] = [];
+  public createEscrowNotes: CreateEscrowNoteAction[] = [];
   public withdraws: WithdrawAction[] = [];
   // Surplus recipient (overrides parent builder's surplus recipient for this token)
   public surplusAction?: SurplusAction;
@@ -81,9 +81,9 @@ export class TokenOperationsBuilderImpl implements TokenOperationsBuilder {
     return this;
   }
 
-  useContractNote(...notes: ContractNoteSpend[]): this {
+  useEscrowNote(...notes: EscrowNoteSpend[]): this {
     for (const note of notes) {
-      this.useContractNotes.push({
+      this.useEscrowNotes.push({
         token: this.token,
         noteId: note.noteId,
         amount: note.amount,
@@ -139,9 +139,9 @@ export class TokenOperationsBuilderImpl implements TokenOperationsBuilder {
     return this;
   }
 
-  createContractNote(...outputs: ContractNoteCreation[]): this {
+  createEscrowNote(...outputs: EscrowNoteCreation[]): this {
     for (const output of outputs) {
-      this.createContractNotes.push({
+      this.createEscrowNotes.push({
         token: this.token,
         contractAddress: output.contractAddress,
         policyCommitment: output.policyCommitment,
@@ -305,9 +305,9 @@ export class PrivateTransfersBuilderImpl implements PrivateTransfersBuilder {
     const openTokenChannels: OpenTokenChannelAction[] = [];
     const deposits: DepositAction[] = [];
     const useNotes: UseNoteAction[] = [];
-    const useContractNotes: UseContractNoteAction[] = [];
+    const useEscrowNotes: UseEscrowNoteAction[] = [];
     const createNotes: CreateNoteAction[] = [];
-    const createContractNotes: CreateContractNoteAction[] = [];
+    const createEscrowNotes: CreateEscrowNoteAction[] = [];
     const withdraws: WithdrawAction[] = [];
     const surpluses: SurplusAction[] = [];
 
@@ -319,9 +319,9 @@ export class PrivateTransfersBuilderImpl implements PrivateTransfersBuilder {
       openTokenChannels.push(...tokenBuilder.openTokenChannels);
       deposits.push(...tokenBuilder.deposits);
       useNotes.push(...tokenBuilder.useNotes);
-      useContractNotes.push(...tokenBuilder.useContractNotes);
+      useEscrowNotes.push(...tokenBuilder.useEscrowNotes);
       createNotes.push(...tokenBuilder.createNotes);
-      createContractNotes.push(...tokenBuilder.createContractNotes);
+      createEscrowNotes.push(...tokenBuilder.createEscrowNotes);
       withdraws.push(...tokenBuilder.withdraws);
 
       const surplusToAction = tokenBuilder.surplusAction ?? this.defaultSurplusAction;
@@ -336,9 +336,9 @@ export class PrivateTransfersBuilderImpl implements PrivateTransfersBuilder {
       openTokenChannels,
       deposits,
       useNotes,
-      useContractNotes,
+      useEscrowNotes,
       createNotes,
-      createContractNotes,
+      createEscrowNotes,
       withdraws,
       surpluses,
       invoke: this.invokeExternal,

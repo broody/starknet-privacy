@@ -16,7 +16,7 @@ User transaction entry point. `__execute__` validates context, compiles `ClientA
 
 ### IViews
 
-Read-only queries: channel/subchannel existence, regular and contract note lookup, nullifier checks, public key retrieval, fee info.
+Read-only queries: channel/subchannel existence, regular and escrow note lookup, nullifier checks, public key retrieval, fee info.
 
 ### IAdmin
 
@@ -33,29 +33,29 @@ Actions must be ordered by phase. Actions within the same phase can appear in an
 | 2 | `OpenSubchannel` | Open token-specific subchannel |
 | 3 | `Deposit` | Deposit tokens into contract |
 | 4 | `UseNote` | Spend a recipient note (creates nullifier) |
-| 4 | `UseContractNote` | Privately open a contract note (requires contract-note callback) |
+| 4 | `UseEscrowNote` | Privately open an escrow note (requires escrow-note callback) |
 | 5 | `CreateEncNote` | Create encrypted note |
 | 5 | `CreateOpenNote` | Create open (unencrypted) note |
-| 5 | `CreateContractNote` | Create a contract-controlled note (requires contract-note callback) |
+| 5 | `CreateEscrowNote` | Create an escrow note (requires escrow-note callback) |
 | 6 | `Withdraw` | Withdraw tokens |
 | 7 | `InvokeExternal` | Call external contract (at most once per tx) |
 | 7 | `ComputeAndInvoke` | Compute privately, then call an external contract (at most once per tx) |
 
-## Contract notes
+## Escrow notes
 
-Contract notes hold a private amount under an application contract's policy. A single private random
+Escrow notes hold a private amount under an application contract's policy. A single private random
 `secret` domain-separately derives the note-ID nonce and amount blinding. A spend proves the opening
 privately and emits only a secret-derived nullifier; the pool does not generically reveal which
 creation was consumed. Application-level `policy_commitment` values may still be linkable if the
 application makes them unique or public.
 
-Every transaction that creates or spends contract notes must contain exactly one invoke-phase
+Every transaction that creates or spends escrow notes must contain exactly one invoke-phase
 action targeting their application contract. The pool changes the selector to
-`privacy_contract_note_invoke` (or `privacy_contract_note_invoke_with_computation`) and prepends a
-`ContractNoteContext`:
+`privacy_escrow_note_invoke` (or `privacy_escrow_note_invoke_with_computation`) and prepends a
+`EscrowNoteContext`:
 
 ```cairo
-pub struct ContractNoteContext {
+pub struct EscrowNoteContext {
     actions_hash: felt252,
     serialized_actions: Span<felt252>,
 }
@@ -66,12 +66,12 @@ contracts must:
 
 - assert that the caller is the expected privacy pool and read the chain ID from transaction context;
 - validate the application-specific `policy_commitment` in the serialized actions;
-- call `validate_contract_note_context` to authenticate and deserialize `serialized_actions`,
+- call `validate_escrow_note_context` to authenticate and deserialize `serialized_actions`,
   enforce the permitted asset disposition, and bind any stored authorization to `actions_hash`; and
 - return a correctly serialized `Span<OpenNoteDeposit>` (empty when it creates no open-note
   deposits).
 
-Only one application contract may appear in a transaction. Contract notes remain bound to its
+Only one application contract may appear in a transaction. Escrow notes remain bound to its
 address across upgrades. Applications own their upgrade policy and must preserve the callback ABI
 and policy semantics needed by outstanding notes; they can disable upgrades when immutability is
 required.
@@ -83,7 +83,7 @@ application state.
 ## Cryptographic primitives
 
 - All hashes use Poseidon with domain-separation tags (see [`hashes.cairo`](src/hashes.cairo) for formulas)
-- Key derivations: `channel_key`, `channel_marker`, `subchannel_marker`, `subchannel_id`, `outgoing_channel_id`, `note_id`, `nullifier`, contract note IDs/commitments/nullifiers
+- Key derivations: `channel_key`, `channel_marker`, `subchannel_marker`, `subchannel_id`, `outgoing_channel_id`, `note_id`, `nullifier`, escrow note IDs/commitments/nullifiers
 - Encryption: ECDH with ephemeral keys; encrypted fields include channel keys, addresses, note amounts, tokens, and private keys
 
 ## Security
@@ -125,8 +125,8 @@ application state.
 | `Deposit` | `Deposit` action |
 | `Withdrawal` | `Withdraw` action |
 | `NoteUsed` | `UseNote` action |
-| `ContractNoteCreated` | `CreateContractNote` action after contract-note authorization |
-| `ContractNoteUsed` | `UseContractNote` action after contract-note authorization |
+| `EscrowNoteCreated` | `CreateEscrowNote` action after escrow-note authorization |
+| `EscrowNoteUsed` | `UseEscrowNote` action after escrow-note authorization |
 | `OpenNoteCreated` | `CreateOpenNote` action |
 | `OpenNoteDeposited` | `deposit_to_open_note()` |
 | `AuditorPublicKeySet` | `set_auditor_public_key()` |

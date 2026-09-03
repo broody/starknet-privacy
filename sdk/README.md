@@ -69,20 +69,20 @@ const transfers = createPrivateTransfers({
 
 This section describes the recommended integration patterns. Each subsection gives one opinionated recipe — stick to it unless you have a specific reason to deviate.
 
-### Contract notes
+### Escrow notes
 
-Use `createContractNote` and `useContractNote` for private-value notes whose lifecycle is
+Use `createEscrowNote` and `useEscrowNote` for private-value notes whose lifecycle is
 authorized by an application contract. Always add `.invoke()` (or `.computeAndInvoke()`) targeting
-that same contract; the pool routes it to the dedicated contract-note callback and reverts all
-note and application state if authorization fails. Applications can give these notes a more
-specific name; for example, Whisper presents its auction-bound contract notes as escrow notes.
+that same contract; the pool routes it to the dedicated escrow-note callback and reverts all
+note and application state if authorization fails. For example, Whisper uses escrow notes to keep
+sealed bids private while its auction contract controls settlement and refunds.
 
 ```typescript
 await transfers
   .build()
   .with(STRK)
   .inputs(fundingNote)
-  .createContractNote({
+  .createEscrowNote({
     contractAddress: auction,
     policyCommitment: settlementCommitment,
     amount: bidAmount,
@@ -95,9 +95,9 @@ await transfers
 
 The `secret` and amount opening are secret prover inputs. Generate the secret with cryptographic
 randomness, retain it until spend, and never log or publish it.
-The contract-note callback must verify the pool caller, call `validate_contract_note_context`, and
+The escrow-note callback must verify the pool caller, call `validate_escrow_note_context`, and
 bind any stored authorization to `actions_hash`; checking only the policy commitment does not
-constrain where the controlled value goes. Contract notes remain bound to the application contract
+constrain where the controlled value goes. Escrow notes remain bound to the application contract
 address across upgrades. Applications must preserve the callback ABI and policy semantics needed by
 outstanding notes, and can disable upgrades when immutability is required.
 

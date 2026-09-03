@@ -10,15 +10,15 @@ use openzeppelin::interfaces::introspection::{ISRC5SafeDispatcher, ISRC5SafeDisp
 use privacy::actions::{ClientAction, ServerAction, WriteOnceInput};
 use privacy::errors;
 use privacy::errors::internal_errors;
-use privacy::hashes::domain_separation::CONTRACT_NOTE_ACTIONS_TAG;
+use privacy::hashes::domain_separation::ESCROW_NOTE_ACTIONS_TAG;
 use privacy::hashes::{
     compute_enc_amount_hash, compute_enc_channel_key_hash, compute_enc_private_key_hash,
     compute_enc_recipient_addr_hash, compute_enc_sender_addr_hash, compute_enc_token_hash,
     compute_enc_user_addr_hash,
 };
 use privacy::objects::{
-    ContractNoteContext, EncChannelInfo, EncOutgoingChannelInfo, EncPrivateKey, EncSubchannelInfo,
-    EncUserAddr, Note, OpenNoteDeposit,
+    EncChannelInfo, EncOutgoingChannelInfo, EncPrivateKey, EncSubchannelInfo, EncUserAddr,
+    EscrowNoteContext, Note, OpenNoteDeposit,
 };
 use privacy::snip12::compute_call_set_hash;
 use privacy::utils::constants::{
@@ -94,13 +94,13 @@ pub mod constants {
     pub const INVOKE_WITH_COMPUTATION_SELECTOR: felt252 = selector!(
         "privacy_invoke_with_computation",
     );
-    /// Contract-note-authorizing counterpart to `privacy_invoke`. The pool prepends a canonical
-    /// [`ContractNoteContext`](privacy::objects::ContractNoteContext) to the original invoke
+    /// Escrow-note-authorizing counterpart to `privacy_invoke`. The pool prepends a canonical
+    /// [`EscrowNoteContext`](privacy::objects::EscrowNoteContext) to the original invoke
     /// calldata.
-    pub const CONTRACT_NOTE_INVOKE_SELECTOR: felt252 = selector!("privacy_contract_note_invoke");
-    /// Contract-note-authorizing counterpart to `privacy_invoke_with_computation`.
-    pub const CONTRACT_NOTE_INVOKE_WITH_COMPUTATION_SELECTOR: felt252 = selector!(
-        "privacy_contract_note_invoke_with_computation",
+    pub const ESCROW_NOTE_INVOKE_SELECTOR: felt252 = selector!("privacy_escrow_note_invoke");
+    /// Escrow-note-authorizing counterpart to `privacy_invoke_with_computation`.
+    pub const ESCROW_NOTE_INVOKE_WITH_COMPUTATION_SELECTOR: felt252 = selector!(
+        "privacy_escrow_note_invoke_with_computation",
     );
     /// STRK fee token address — same on all Starknet networks (mainnet, sepolia, devnet).
     pub const STRK_TOKEN_ADDRESS: ContractAddress =
@@ -580,31 +580,31 @@ pub(crate) fn compute_message_hash(
 }
 
 /// Commits to the exact proven server-action list under the current chain and pool.
-pub(crate) fn compute_contract_note_actions_hash(
+pub(crate) fn compute_escrow_note_actions_hash(
     actions: Span<ServerAction>, chain_id: felt252, pool_address: ContractAddress,
 ) -> felt252 {
-    let mut data = array![CONTRACT_NOTE_ACTIONS_TAG, chain_id, pool_address.into()];
+    let mut data = array![ESCROW_NOTE_ACTIONS_TAG, chain_id, pool_address.into()];
     actions.serialize(ref data);
     poseidon_hash_span(data.span())
 }
 
-/// Deserializes and authenticates the server-action list in a contract-note callback.
+/// Deserializes and authenticates the server-action list in an escrow-note callback.
 ///
 /// The application contract must separately assert that `get_caller_address()` is its expected
 /// privacy pool. This helper binds the canonical action list to that caller and the current chain.
-pub fn validate_contract_note_context(context: ContractNoteContext) -> Span<ServerAction> {
-    let ContractNoteContext { actions_hash, serialized_actions } = context;
+pub fn validate_escrow_note_context(context: EscrowNoteContext) -> Span<ServerAction> {
+    let EscrowNoteContext { actions_hash, serialized_actions } = context;
     let mut serialized_actions = serialized_actions;
     let actions: Span<ServerAction> = Serde::deserialize(ref serialized_actions)
-        .expect(errors::INVALID_CONTRACT_NOTE_CONTEXT);
-    assert(serialized_actions.is_empty(), errors::INVALID_CONTRACT_NOTE_CONTEXT);
+        .expect(errors::INVALID_ESCROW_NOTE_CONTEXT);
+    assert(serialized_actions.is_empty(), errors::INVALID_ESCROW_NOTE_CONTEXT);
     assert(
-        actions_hash == compute_contract_note_actions_hash(
+        actions_hash == compute_escrow_note_actions_hash(
             :actions,
             chain_id: get_execution_info().tx_info.chain_id,
             pool_address: get_caller_address(),
         ),
-        errors::INVALID_CONTRACT_NOTE_CONTEXT,
+        errors::INVALID_ESCROW_NOTE_CONTEXT,
     );
     actions
 }
