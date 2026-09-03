@@ -37,6 +37,10 @@ pub mod domain_separation {
     pub const OUTGOING_CHANNEL_ID_TAG: felt252 = 'OUTGOING_CHANNEL_ID_TAG:V1';
     /// Tag for `identity_key`.
     pub const IDENTITY_KEY_TAG: felt252 = 'IDENTITY_KEY_TAG:V1';
+    /// Tag for `predicate_channel_key`.
+    pub const PREDICATE_CHANNEL_KEY_TAG: felt252 = 'PREDICATE_CHANNEL_KEY_TAG:V1';
+    /// Tag for `predicate_nullifier`.
+    pub const PREDICATE_NULLIFIER_TAG: felt252 = 'PREDICATE_NULLIFIER_TAG:V1';
 }
 
 
@@ -234,3 +238,36 @@ pub(crate) fn compute_nullifier(
             .span(),
     )
 }
+
+/// Computes the channel key for a predicate-escrowed note.
+///
+/// `predicate_channel_key = h(PREDICATE_CHANNEL_KEY_TAG, sender_addr, predicate_address,
+/// predicate_commitment)`
+pub(crate) fn compute_predicate_channel_key(
+    sender_addr: ContractAddress, predicate_address: ContractAddress, predicate_commitment: felt252,
+) -> felt252 {
+    hash(
+        [
+            PREDICATE_CHANNEL_KEY_TAG, sender_addr.into(), predicate_address.into(),
+            predicate_commitment,
+        ]
+            .span(),
+    )
+}
+
+/// Computes the nullifier for a predicate-escrowed note.
+///
+/// `predicate_nullifier = h(PREDICATE_NULLIFIER_TAG, channel_key, token, index, 0,
+/// predicate_address)`
+pub(crate) fn compute_predicate_nullifier(
+    channel_key: felt252, token: ContractAddress, index: usize, predicate_address: ContractAddress,
+) -> felt252 {
+    hash(
+        [
+            PREDICATE_NULLIFIER_TAG, channel_key, token.into(), index.into(), Zero::zero(),
+            predicate_address.into(),
+        ]
+            .span(),
+    )
+}
+

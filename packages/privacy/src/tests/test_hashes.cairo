@@ -1,7 +1,7 @@
 use privacy::hashes::{
     compute_channel_key, compute_channel_marker, compute_identity_key, compute_note_id,
-    compute_nullifier, compute_outgoing_channel_id, compute_subchannel_id,
-    compute_subchannel_marker, hash,
+    compute_nullifier, compute_outgoing_channel_id, compute_predicate_channel_key,
+    compute_predicate_nullifier, compute_subchannel_id, compute_subchannel_marker, hash,
 };
 use starkware_utils::constants::MAX_U32;
 
@@ -252,4 +252,67 @@ fn test_compute_nullifier_different_inputs() {
     assert_ne!(nullifier, nullifier_diff_token);
     assert_ne!(nullifier, nullifier_diff_index);
     assert_ne!(nullifier, nullifier_diff_owner_private_key);
+}
+
+#[test]
+fn test_compute_predicate_channel_key_different_inputs() {
+    let sender_addr = hash(['SENDER_ADDR'].span()).try_into().unwrap();
+    let predicate_address = hash(['PREDICATE_ADDR'].span()).try_into().unwrap();
+    let predicate_commitment = hash(['PREDICATE_COMMITMENT'].span());
+    let channel_key = compute_predicate_channel_key(
+        :sender_addr, :predicate_address, :predicate_commitment,
+    );
+    let other_sender_addr = hash(['OTHER_SENDER_ADDR'].span()).try_into().unwrap();
+    let other_predicate_address = hash(['OTHER_PREDICATE_ADDR'].span()).try_into().unwrap();
+    let other_predicate_commitment = hash(['OTHER_PREDICATE_COMMITMENT'].span());
+
+    assert_ne!(sender_addr, other_sender_addr);
+    assert_ne!(predicate_address, other_predicate_address);
+    assert_ne!(predicate_commitment, other_predicate_commitment);
+
+    let key_diff_sender = compute_predicate_channel_key(
+        sender_addr: other_sender_addr, :predicate_address, :predicate_commitment,
+    );
+    let key_diff_pred_addr = compute_predicate_channel_key(
+        :sender_addr, predicate_address: other_predicate_address, :predicate_commitment,
+    );
+    let key_diff_pred_commit = compute_predicate_channel_key(
+        :sender_addr, :predicate_address, predicate_commitment: other_predicate_commitment,
+    );
+
+    assert_ne!(channel_key, key_diff_sender);
+    assert_ne!(channel_key, key_diff_pred_addr);
+    assert_ne!(channel_key, key_diff_pred_commit);
+}
+
+#[test]
+fn test_compute_predicate_nullifier_different_inputs() {
+    let channel_key = hash(['CHANNEL_KEY'].span());
+    let token = hash(['TOKEN'].span()).try_into().unwrap();
+    let index: usize = 0;
+    let predicate_address = hash(['PREDICATE_ADDR'].span()).try_into().unwrap();
+    let nullifier = compute_predicate_nullifier(:channel_key, :token, :index, :predicate_address);
+
+    let other_channel_key = hash(['OTHER_CHANNEL_KEY'].span());
+    let other_token = hash(['OTHER_TOKEN'].span()).try_into().unwrap();
+    let other_index: usize = 1;
+    let other_predicate_address = hash(['OTHER_PREDICATE_ADDR'].span()).try_into().unwrap();
+
+    let null_diff_key = compute_predicate_nullifier(
+        channel_key: other_channel_key, :token, :index, :predicate_address,
+    );
+    let null_diff_token = compute_predicate_nullifier(
+        :channel_key, token: other_token, :index, :predicate_address,
+    );
+    let null_diff_index = compute_predicate_nullifier(
+        :channel_key, :token, index: other_index, :predicate_address,
+    );
+    let null_diff_pred = compute_predicate_nullifier(
+        :channel_key, :token, :index, predicate_address: other_predicate_address,
+    );
+
+    assert_ne!(nullifier, null_diff_key);
+    assert_ne!(nullifier, null_diff_token);
+    assert_ne!(nullifier, null_diff_index);
+    assert_ne!(nullifier, null_diff_pred);
 }

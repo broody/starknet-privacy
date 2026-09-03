@@ -134,3 +134,15 @@ pub struct OpenNoteDeposit {
     /// The amount of tokens to deposit.
     pub amount: u128,
 }
+
+/// Authorization for spending a predicate-escrowed note (returned by invoked contract).
+#[derive(Serde, Copy, Drop, PartialEq, Debug)]
+pub struct PredicateSpendAuth {
+    /// The identifier of the predicate note authorized to be spent.
+    pub note_id: felt252,
+    /// The predicate contract address that authorized the spend.
+    pub predicate_address: ContractAddress,
+    /// The authorized amount to spend.
+    pub amount: u128,
+}
+

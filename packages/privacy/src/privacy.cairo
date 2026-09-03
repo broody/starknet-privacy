@@ -8,15 +8,16 @@ pub mod Privacy {
     use openzeppelin::security::ReentrancyGuardComponent;
     use privacy::actions::{
         AppendInput, ClientAction, ClientActionTrait, ComputeAndInvokeInput, CreateEncNoteInput,
-        CreateOpenNoteInput, DepositInput, InputValidation, InvokeExternalInput, InvokeInput,
-        OpenChannelInput, OpenSubchannelInput, ServerAction, SetViewingKeyInput, TransferFromInput,
-        TransferToInput, UseNoteInput, WithdrawInput, WriteOnceInput,
+        CreateOpenNoteInput, CreatePredicateNoteInput, DepositInput, InputValidation,
+        InvokeExternalInput, InvokeInput, OpenChannelInput, OpenSubchannelInput, ServerAction,
+        SetViewingKeyInput, TransferFromInput, TransferToInput, UseNoteInput, UsePredicateNoteInput,
+        WithdrawInput, WriteOnceInput,
     };
     use privacy::errors::internal_errors;
     use privacy::hashes::{
         compute_channel_key, compute_channel_marker, compute_identity_key, compute_note_id,
-        compute_nullifier, compute_outgoing_channel_id, compute_subchannel_id,
-        compute_subchannel_marker,
+        compute_nullifier, compute_outgoing_channel_id, compute_predicate_channel_key,
+        compute_predicate_nullifier, compute_subchannel_id, compute_subchannel_marker,
     };
     use privacy::interface::{IAdmin, IClient, IServer, IViews};
     use privacy::objects::{
@@ -143,6 +144,8 @@ pub mod Privacy {
         OpenNoteDeposited: events::OpenNoteDeposited,
         ExternalContractInvoked: events::ExternalContractInvoked,
         NoteUsed: events::NoteUsed,
+        PredicateNoteCreated: events::PredicateNoteCreated,
+        PredicateNoteUsed: events::PredicateNoteUsed,
         FeeAmountSet: events::FeeAmountSet,
         FeeCollectorSet: events::FeeCollectorSet,
         ProofValidityBlocksSet: events::ProofValidityBlocksSet,
@@ -290,6 +293,8 @@ pub mod Privacy {
                         .create_open_note(
                             sender_addr: user_addr, sender_private_key: user_private_key, :input,
                         ),
+                    ClientAction::CreatePredicateNote(input) => self
+                        .create_predicate_note(sender_addr: user_addr, :input, ref :token_balances),
                     ClientAction::UseNote(input) => self
                         .use_note(
                             owner_addr: user_addr,
@@ -297,6 +302,8 @@ pub mod Privacy {
                             :input,
                             ref :token_balances,
                         ),
+                    ClientAction::UsePredicateNote(input) => self
+                        .use_predicate_note(:input, ref :token_balances),
                     ClientAction::Withdraw(input) => self
                         .withdraw(:user_addr, :input, ref :token_balances),
                     ClientAction::InvokeExternal(input) => self.invoke_external(:input),
@@ -713,6 +720,82 @@ pub mod Privacy {
             ]
         }
 
+        /// Returns the server actions to create a predicate-escrowed note.
+        /// Assumes `sender_addr` is non-zero (checked in `main`).
+        fn create_predicate_note(
+            self: @ContractState,
+            sender_addr: ContractAddress,
+            input: CreatePredicateNoteInput,
+            ref token_balances: TokenBalances,
+        ) -> Array<ServerAction> {
+            input.assert_valid();
+            let CreatePredicateNoteInput {
+                predicate_address, predicate_commitment, token, amount, index, salt,
+            } = input;
+
+            let channel_key = compute_predicate_channel_key(
+                :sender_addr, :predicate_address, :predicate_commitment,
+            );
+            let note_id = compute_note_id(:channel_key, :token, :index);
+            let storage_address = storage_path_to_felt252(path: self.notes.entry(note_id));
+            let packed_value = enc_note_packed_value(:channel_key, :token, :index, :salt, :amount);
+            assert(packed_value.is_non_zero(), internal_errors::ZERO_NOTE_VALUE);
+
+            token_balances.subtract_balance(:token, :amount);
+
+            array![
+                to_write_once_action(:storage_address, value: packed_value),
+                ServerAction::EmitPredicateNoteCreated(
+                    events::PredicateNoteCreated {
+                        note_id, predicate_address, predicate_commitment, packed_value,
+                    },
+                ),
+            ]
+        }
+
+        /// Returns the server actions to spend a predicate-escrowed note.
+        fn use_predicate_note(
+            self: @ContractState, input: UsePredicateNoteInput, ref token_balances: TokenBalances,
+        ) -> Array<ServerAction> {
+            input.assert_valid();
+            let UsePredicateNoteInput {
+                sender_addr, predicate_address, predicate_commitment, token, index, salt: _,
+            } = input;
+
+            let channel_key = compute_predicate_channel_key(
+                :sender_addr, :predicate_address, :predicate_commitment,
+            );
+            let note_id = compute_note_id(:channel_key, :token, :index);
+
+            // Read note from storage and assert it exists.
+            let packed_value = self.notes.entry(note_id).packed_value.read();
+            assert(packed_value.is_non_zero(), errors::NOTE_NOT_FOUND);
+
+            // Decode note amount.
+            let amount = decode_note_amount(:packed_value, :channel_key, :token, :index);
+            assert(amount.is_non_zero(), errors::ZERO_NOTE_AMOUNT_USAGE);
+
+            // Compute predicate nullifier.
+            let nullifier = compute_predicate_nullifier(
+                :channel_key, :token, :index, :predicate_address,
+            );
+
+            token_balances.add_balance(:token, :amount);
+
+            array![
+                to_write_once_action(
+                    storage_address: storage_path_to_felt252(
+                        path: self.nullifiers.entry(nullifier),
+                    ),
+                    value: true,
+                ),
+                ServerAction::EmitPredicateNoteUsed(
+                    events::PredicateNoteUsed { nullifier, predicate_address },
+                ),
+            ]
+        }
+
+
         /// Validates preconditions and computes values needed for creating a note.
         /// Returns `(channel_key, storage_address, note_id)`.
         /// Assumes all input is valid (non-zero, canonical private_key).
@@ -774,6 +857,8 @@ pub mod Privacy {
                     ServerAction::EmitOpenNoteCreated(_) => {},
                     ServerAction::EmitEncNoteCreated(_) => {},
                     ServerAction::EmitNoteUsed(_) => {},
+                    ServerAction::EmitPredicateNoteCreated(_) => {},
+                    ServerAction::EmitPredicateNoteUsed(_) => {},
                 }
             }
         }
@@ -902,6 +987,8 @@ pub mod Privacy {
                     },
                     ServerAction::EmitEncNoteCreated(event) => self.emit(event),
                     ServerAction::EmitNoteUsed(event) => self.emit(event),
+                    ServerAction::EmitPredicateNoteCreated(event) => self.emit(event),
+                    ServerAction::EmitPredicateNoteUsed(event) => self.emit(event),
                 };
             }
             assert(undeposited_open_notes == Zero::zero(), errors::UNDEPOSITED_OPEN_NOTES);

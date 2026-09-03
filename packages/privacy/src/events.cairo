@@ -107,6 +107,32 @@ pub struct NoteUsed {
 }
 
 #[derive(Serde, Copy, Debug, Drop, PartialEq, starknet::Event)]
+pub struct PredicateNoteCreated {
+    /// The note ID.
+    #[key]
+    pub note_id: felt252,
+    /// The predicate contract address.
+    #[key]
+    pub predicate_address: ContractAddress,
+    /// The application-specific predicate commitment.
+    #[key]
+    pub predicate_commitment: felt252,
+    /// The packed note value.
+    pub packed_value: felt252,
+}
+
+#[derive(Serde, Copy, Debug, Drop, PartialEq, starknet::Event)]
+pub struct PredicateNoteUsed {
+    /// The nullifier of the used predicate note.
+    #[key]
+    pub nullifier: felt252,
+    /// The predicate contract address that authorized the spend.
+    #[key]
+    pub predicate_address: ContractAddress,
+}
+
+
+#[derive(Serde, Copy, Debug, Drop, PartialEq, starknet::Event)]
 pub struct FeeAmountSet {
     /// The fee amount in FRI per `apply_actions` call.
     pub fee_amount: u128,
