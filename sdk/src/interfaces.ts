@@ -196,6 +196,33 @@ export type UseNoteAction = {
   note: Note;
 };
 
+/** Private opening used to create a note controlled by a predicate contract. */
+export type PredicateNoteCreation = {
+  predicateAddress: StarknetAddress;
+  predicateCommitment: BigNumberish;
+  amount: Amount;
+  /** Secret, non-zero random felt retained by the creator until the note is spent. */
+  nonce: BigNumberish;
+  /** Secret, non-zero random felt retained with the amount opening. */
+  blinding: BigNumberish;
+};
+
+/** Private opening of an existing predicate note. */
+export type PredicateNoteSpend = {
+  noteId: NoteId;
+  amount: Amount;
+  blinding: BigNumberish;
+};
+
+export type CreatePredicateNoteAction = PredicateNoteCreation & {
+  token: StarknetAddressBigint;
+};
+
+export type UsePredicateNoteAction = PredicateNoteSpend & {
+  /** Used for local balance planning; the pool verifies the token from committed note state. */
+  token: StarknetAddressBigint;
+};
+
 export type CreateNoteAction = {
   recipient: StarknetAddressBigint;
   token: StarknetAddressBigint;
@@ -256,7 +283,9 @@ export type Actions = {
   openTokenChannels?: OpenTokenChannelAction[];
   deposits?: DepositAction[];
   useNotes?: UseNoteAction[];
+  usePredicateNotes?: UsePredicateNoteAction[];
   createNotes?: CreateNoteAction[];
+  createPredicateNotes?: CreatePredicateNoteAction[];
   withdraws?: WithdrawAction[];
   surpluses?: SurplusAction[];
   invoke?: InvokeAction;
@@ -590,6 +619,13 @@ export interface TokenOperationsBuilder {
   inputs(...notes: Note[]): this;
 
   /**
+   * Consume predicate notes as private inputs. The same transaction must call `.invoke()` (or
+   * `.computeAndInvoke()`) with the predicate contract as its target; authorization failure
+   * reverts the complete transaction.
+   */
+  usePredicateNote(...notes: PredicateNoteSpend[]): this;
+
+  /**
    * Deposit this token.
    * @param inputs Array of inputs to deposit. Each input can be a recipient address or a note id.
    */
@@ -603,6 +639,13 @@ export interface TokenOperationsBuilder {
    * Context for each recipient is resolved from registry or discovery.
    */
   transfer(...outputs: TransferOutput[]): this;
+
+  /**
+   * Create notes controlled by a predicate contract. `nonce` and `blinding` are private openings:
+   * generate them cryptographically, never publish them, and retain them until spend. The same
+   * transaction must invoke the predicate contract to authorize creation.
+   */
+  createPredicateNote(...outputs: PredicateNoteCreation[]): this;
 
   /**
    * Set the recipient for any surplus for this token.

@@ -20,6 +20,9 @@ import {
   compute_enc_sender_addr_hash,
   compute_enc_recipient_addr_hash,
   compute_outgoing_channel_id,
+  compute_predicate_note_id,
+  compute_predicate_note_commitment,
+  compute_predicate_nullifier,
 } from "../../src/utils/hashes.js";
 import referenceHashes from "../fixtures/cairo-reference-data.json" with { type: "json" };
 
@@ -36,6 +39,13 @@ describe("Hash Compatibility with Cairo", () => {
   const index = inputs.index;
   const salt = BigInt(inputs.salt);
   const sharedX = BigInt(inputs.sharedX);
+  const predicateChainId = BigInt(inputs.predicateChainId);
+  const predicatePool = BigInt(inputs.predicatePool);
+  const predicateAddress = BigInt(inputs.predicateAddress);
+  const predicateClassHash = BigInt(inputs.predicateClassHash);
+  const predicateCommitment = BigInt(inputs.predicateCommitment);
+  const predicateNonce = BigInt(inputs.predicateNonce);
+  const predicateBlinding = BigInt(inputs.predicateBlinding);
 
   it("compute_channel_key matches Cairo", () => {
     const result = compute_channel_key(sender, senderPrivateKey, recipient, recipientPublicKey);
@@ -100,5 +110,40 @@ describe("Hash Compatibility with Cairo", () => {
   it("compute_outgoing_channel_id matches Cairo", () => {
     const result = compute_outgoing_channel_id(sender, senderPrivateKey, index);
     expect(result.toString(16)).toBe(BigInt(outputs.outgoingChannelId).toString(16));
+  });
+
+  it("predicate note hashes match Cairo", () => {
+    const predicateNoteId = compute_predicate_note_id(
+      predicateChainId,
+      predicatePool,
+      sender,
+      predicateAddress,
+      predicateClassHash,
+      predicateCommitment,
+      token,
+      predicateNonce
+    );
+    expect(predicateNoteId.toString(16)).toBe(BigInt(outputs.predicateNoteId).toString(16));
+
+    const noteCommitment = compute_predicate_note_commitment(
+      predicateChainId,
+      predicatePool,
+      predicateNoteId,
+      predicateAddress,
+      predicateClassHash,
+      predicateCommitment,
+      token,
+      BigInt(inputs.amount),
+      predicateBlinding
+    );
+    expect(noteCommitment.toString(16)).toBe(BigInt(outputs.predicateNoteCommitment).toString(16));
+    expect(
+      compute_predicate_nullifier(
+        predicateChainId,
+        predicatePool,
+        predicateNoteId,
+        predicateBlinding
+      ).toString(16)
+    ).toBe(BigInt(outputs.predicateNullifier).toString(16));
   });
 });

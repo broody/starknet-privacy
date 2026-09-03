@@ -1,5 +1,5 @@
 use privacy::objects::{EncPrivateKey, EncUserAddr, OpenNoteScreeningPolicy};
-use starknet::ContractAddress;
+use starknet::{ClassHash, ContractAddress};
 
 #[derive(Serde, Copy, Debug, Drop, PartialEq, starknet::Event)]
 pub struct ViewingKeySet {
@@ -117,21 +117,30 @@ pub struct PredicateNoteCreated {
     /// The application-specific predicate commitment.
     #[key]
     pub predicate_commitment: felt252,
-    /// The packed note value.
-    pub packed_value: felt252,
+    /// The predicate implementation bound for the lifetime of the note.
+    pub predicate_class_hash: ClassHash,
+    /// The note's token. Predicate-note token types are intentionally public to the predicate.
+    pub token: ContractAddress,
+    /// Hiding commitment to the private amount and blinding.
+    pub note_commitment: felt252,
 }
 
 #[derive(Serde, Copy, Debug, Drop, PartialEq, starknet::Event)]
 pub struct PredicateNoteUsed {
-    /// The nullifier of the used predicate note.
+    /// Secret-derived nullifier of the used predicate note. This does not reveal its note ID.
     #[key]
     pub nullifier: felt252,
     /// The predicate contract address that authorized the spend.
     #[key]
     pub predicate_address: ContractAddress,
+    /// Application-specific policy commitment bound at creation.
+    #[key]
+    pub predicate_commitment: felt252,
+    /// The implementation class bound at creation.
+    pub predicate_class_hash: ClassHash,
+    /// Token released into the private transaction's conservation balance.
+    pub token: ContractAddress,
 }
-
-
 #[derive(Serde, Copy, Debug, Drop, PartialEq, starknet::Event)]
 pub struct FeeAmountSet {
     /// The fee amount in FRI per `apply_actions` call.

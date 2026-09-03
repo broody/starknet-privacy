@@ -16,27 +16,30 @@ pub mod Privacy {
     use privacy::errors::internal_errors;
     use privacy::hashes::{
         compute_channel_key, compute_channel_marker, compute_identity_key, compute_note_id,
-        compute_nullifier, compute_outgoing_channel_id, compute_predicate_channel_key,
-        compute_predicate_nullifier, compute_subchannel_id, compute_subchannel_marker,
+        compute_nullifier, compute_outgoing_channel_id, compute_predicate_note_commitment,
+        compute_predicate_note_id, compute_predicate_nullifier, compute_subchannel_id,
+        compute_subchannel_marker,
     };
     use privacy::interface::{IAdmin, IClient, IServer, IViews};
     use privacy::objects::{
         EncChannelInfo, EncOutgoingChannelInfo, EncPrivateKey, EncSubchannelInfo, Note,
-        OpenNoteDeposit, OpenNoteScreeningPolicy, TokenBalances, TokenBalancesTrait,
+        OpenNoteDeposit, OpenNoteScreeningPolicy, PredicateContext, PredicateNote,
+        PredicateNoteCreatedRef, PredicateNoteSpentRef, TokenBalances, TokenBalancesTrait,
     };
     use privacy::snip12::{ScreeningAttestation, is_screening_attestation_valid};
     use privacy::utils::constants::{
         CONTRACT_VERSION, DEPOSITOR_VALIDATION_MAX_AGE, DEPOSITOR_VALIDATION_MAX_FUTURE,
-        INVOKE_SELECTOR, INVOKE_WITH_COMPUTATION_SELECTOR, OPEN_NOTE_SALT, PRIVACY_COMPUTE_SELECTOR,
-        STRK_TOKEN_ADDRESS, VIRTUAL_SNOS, VIRTUAL_SNOS0,
+        INVOKE_SELECTOR, INVOKE_WITH_COMPUTATION_SELECTOR, OPEN_NOTE_SALT,
+        PREDICATE_INVOKE_SELECTOR, PREDICATE_INVOKE_WITH_COMPUTATION_SELECTOR,
+        PRIVACY_COMPUTE_SELECTOR, STRK_TOKEN_ADDRESS, VIRTUAL_SNOS, VIRTUAL_SNOS0,
     };
     use privacy::utils::{
         ProofFacts, assert_valid_os_call, assert_valid_signature, compute_message_hash,
-        decode_note_amount, derive_public_key, deserialize_invoke_return_data,
-        enc_note_packed_value, encrypt_channel_info, encrypt_outgoing_channel_info,
-        encrypt_private_key, encrypt_subchannel_info, encrypt_user_addr,
-        extract_compile_actions_inputs, extract_server_actions_from_panic, is_canonical_key,
-        open_note, pack, panic_with_server_actions, propagate_external_panic,
+        compute_predicate_actions_hash, decode_note_amount, derive_public_key,
+        deserialize_invoke_return_data, enc_note_packed_value, encrypt_channel_info,
+        encrypt_outgoing_channel_info, encrypt_private_key, encrypt_subchannel_info,
+        encrypt_user_addr, extract_compile_actions_inputs, extract_server_actions_from_panic,
+        is_canonical_key, open_note, pack, panic_with_server_actions, propagate_external_panic,
         send_message_to_server, storage_path_to_felt252, to_write_once_action, unify_address,
         unpack,
     };
@@ -50,12 +53,12 @@ pub mod Privacy {
         StorageBaseAddress, storage_address_from_base_and_offset, storage_base_address_from_felt252,
     };
     use starknet::syscalls::{
-        call_contract_syscall, get_execution_info_v3_syscall, storage_read_syscall,
-        storage_write_syscall,
+        call_contract_syscall, get_class_hash_at_syscall, get_execution_info_v3_syscall,
+        storage_read_syscall, storage_write_syscall,
     };
     use starknet::{
-        ContractAddress, SyscallResultTrait, VALIDATED, get_block_timestamp, get_caller_address,
-        get_contract_address, get_execution_info,
+        ClassHash, ContractAddress, SyscallResultTrait, VALIDATED, get_block_timestamp,
+        get_caller_address, get_contract_address, get_execution_info,
     };
     use starkware_utils::components::common_roles::CommonRolesComponent;
     use starkware_utils::components::common_roles::CommonRolesComponent::InternalTrait as CommonRolesInternalTrait;
@@ -117,6 +120,12 @@ pub mod Privacy {
         fee_collector: ContractAddress,
         /// The number of blocks that a proof is valid for.
         proof_validity_blocks: u64,
+        /// Predicate notes use a separate commitment-based representation from recipient notes.
+        /// Appended to preserve the deployed storage layout.
+        predicate_notes: Map<felt252, PredicateNote>,
+        /// Nullifiers for predicate notes consumed through an authorized callback.
+        /// Appended to preserve the deployed storage layout.
+        predicate_nullifiers: Map<felt252, bool>,
     }
 
     #[event]
@@ -730,24 +739,50 @@ pub mod Privacy {
         ) -> Array<ServerAction> {
             input.assert_valid();
             let CreatePredicateNoteInput {
-                predicate_address, predicate_commitment, token, amount, index, salt,
+                predicate_address, predicate_commitment, token, amount, nonce, blinding,
             } = input;
-
-            let channel_key = compute_predicate_channel_key(
-                :sender_addr, :predicate_address, :predicate_commitment,
+            // Keep the authenticated sender in the private note-id preimage. Unlike the old
+            // construction, the random nonce prevents public address enumeration.
+            let execution_info = get_execution_info();
+            let chain_id = execution_info.tx_info.chain_id;
+            let pool_address = get_contract_address();
+            let predicate_class_hash = get_class_hash_at_syscall(predicate_address)
+                .unwrap_syscall();
+            assert(predicate_class_hash.is_non_zero(), errors::PREDICATE_CLASS_MISMATCH);
+            let note_id = compute_predicate_note_id(
+                :chain_id,
+                :pool_address,
+                :sender_addr,
+                :predicate_address,
+                :predicate_class_hash,
+                :predicate_commitment,
+                :token,
+                :nonce,
             );
-            let note_id = compute_note_id(:channel_key, :token, :index);
-            let storage_address = storage_path_to_felt252(path: self.notes.entry(note_id));
-            let packed_value = enc_note_packed_value(:channel_key, :token, :index, :salt, :amount);
-            assert(packed_value.is_non_zero(), internal_errors::ZERO_NOTE_VALUE);
+            let note_commitment = compute_predicate_note_commitment(
+                :chain_id,
+                :pool_address,
+                :note_id,
+                :predicate_address,
+                :predicate_class_hash,
+                :predicate_commitment,
+                :token,
+                :amount,
+                :blinding,
+            );
+            assert(note_commitment.is_non_zero(), internal_errors::ZERO_NOTE_VALUE);
 
             token_balances.subtract_balance(:token, :amount);
 
             array![
-                to_write_once_action(:storage_address, value: packed_value),
-                ServerAction::EmitPredicateNoteCreated(
+                ServerAction::CreatePredicateNote(
                     events::PredicateNoteCreated {
-                        note_id, predicate_address, predicate_commitment, packed_value,
+                        note_id,
+                        predicate_address,
+                        predicate_commitment,
+                        predicate_class_hash,
+                        token,
+                        note_commitment,
                     },
                 ),
             ]
@@ -758,39 +793,39 @@ pub mod Privacy {
             self: @ContractState, input: UsePredicateNoteInput, ref token_balances: TokenBalances,
         ) -> Array<ServerAction> {
             input.assert_valid();
-            let UsePredicateNoteInput {
-                sender_addr, predicate_address, predicate_commitment, token, index, salt: _,
-            } = input;
-
-            let channel_key = compute_predicate_channel_key(
-                :sender_addr, :predicate_address, :predicate_commitment,
+            let UsePredicateNoteInput { note_id, amount, blinding } = input;
+            let note = self.predicate_notes.read(note_id);
+            assert(note.note_commitment.is_non_zero(), errors::PREDICATE_NOTE_NOT_FOUND);
+            let execution_info = get_execution_info();
+            let chain_id = execution_info.tx_info.chain_id;
+            let pool_address = get_contract_address();
+            let expected_commitment = compute_predicate_note_commitment(
+                :chain_id,
+                :pool_address,
+                :note_id,
+                predicate_address: note.predicate_address,
+                predicate_class_hash: note.predicate_class_hash,
+                predicate_commitment: note.predicate_commitment,
+                token: note.token,
+                :amount,
+                :blinding,
             );
-            let note_id = compute_note_id(:channel_key, :token, :index);
-
-            // Read note from storage and assert it exists.
-            let packed_value = self.notes.entry(note_id).packed_value.read();
-            assert(packed_value.is_non_zero(), errors::NOTE_NOT_FOUND);
-
-            // Decode note amount.
-            let amount = decode_note_amount(:packed_value, :channel_key, :token, :index);
-            assert(amount.is_non_zero(), errors::ZERO_NOTE_AMOUNT_USAGE);
-
-            // Compute predicate nullifier.
+            assert(expected_commitment == note.note_commitment, errors::INVALID_PREDICATE_OPENING);
             let nullifier = compute_predicate_nullifier(
-                :channel_key, :token, :index, :predicate_address,
+                :chain_id, :pool_address, :note_id, :blinding,
             );
 
-            token_balances.add_balance(:token, :amount);
+            token_balances.add_balance(token: note.token, :amount);
 
             array![
-                to_write_once_action(
-                    storage_address: storage_path_to_felt252(
-                        path: self.nullifiers.entry(nullifier),
-                    ),
-                    value: true,
-                ),
-                ServerAction::EmitPredicateNoteUsed(
-                    events::PredicateNoteUsed { nullifier, predicate_address },
+                ServerAction::UsePredicateNote(
+                    events::PredicateNoteUsed {
+                        nullifier,
+                        predicate_address: note.predicate_address,
+                        predicate_commitment: note.predicate_commitment,
+                        predicate_class_hash: note.predicate_class_hash,
+                        token: note.token,
+                    },
                 ),
             ]
         }
@@ -857,8 +892,14 @@ pub mod Privacy {
                     ServerAction::EmitOpenNoteCreated(_) => {},
                     ServerAction::EmitEncNoteCreated(_) => {},
                     ServerAction::EmitNoteUsed(_) => {},
-                    ServerAction::EmitPredicateNoteCreated(_) => {},
-                    ServerAction::EmitPredicateNoteUsed(_) => {},
+                    ServerAction::CreatePredicateNote(event) => {
+                        self._apply_predicate_note_created(:event);
+                        has_replay_protection = true;
+                    },
+                    ServerAction::UsePredicateNote(event) => {
+                        self._apply_predicate_note_used(:event);
+                        has_replay_protection = true;
+                    },
                 }
             }
         }
@@ -949,8 +990,26 @@ pub mod Privacy {
         fn _apply_actions(
             ref self: ContractState, actions: Span<ServerAction>,
         ) -> Option<ContractAddress> {
+            let (predicate_address, predicate_class_hash, created_notes, spent_notes) = self
+                ._collect_predicate_actions(:actions);
+            let execution_info = get_execution_info();
+            let mut serialized_actions = array![];
+            actions.serialize(ref serialized_actions);
+            let predicate_context = PredicateContext {
+                chain_id: execution_info.tx_info.chain_id,
+                pool_address: get_contract_address(),
+                actions_hash: compute_predicate_actions_hash(
+                    :actions,
+                    chain_id: execution_info.tx_info.chain_id,
+                    pool_address: get_contract_address(),
+                ),
+                serialized_actions: serialized_actions.span(),
+                created_notes: created_notes.span(),
+                spent_notes: spent_notes.span(),
+            };
             let mut undeposited_open_notes: usize = Zero::zero();
             let mut screening_subject: Option<ContractAddress> = None;
+            let mut predicate_callback_applied = false;
             for action in actions {
                 match *action {
                     ServerAction::WriteOnce(input) => self._apply_write_once(:input),
@@ -961,19 +1020,41 @@ pub mod Privacy {
                     },
                     ServerAction::TransferTo(input) => self._apply_transfer_to(:input),
                     ServerAction::Invoke(input) => {
+                        let (selector, context) = self
+                            ._predicate_invoke_parameters(
+                                :input,
+                                standard_selector: INVOKE_SELECTOR,
+                                predicate_selector: PREDICATE_INVOKE_SELECTOR,
+                                :predicate_address,
+                                :predicate_class_hash,
+                                :predicate_context,
+                                ref :predicate_callback_applied,
+                            );
                         self
                             ._apply_invoke_and_deposits(
                                 :input,
-                                selector: INVOKE_SELECTOR,
+                                :selector,
+                                :context,
                                 ref :undeposited_open_notes,
                                 ref :screening_subject,
                             );
                     },
                     ServerAction::InvokeWithComputation(input) => {
+                        let (selector, context) = self
+                            ._predicate_invoke_parameters(
+                                :input,
+                                standard_selector: INVOKE_WITH_COMPUTATION_SELECTOR,
+                                predicate_selector: PREDICATE_INVOKE_WITH_COMPUTATION_SELECTOR,
+                                :predicate_address,
+                                :predicate_class_hash,
+                                :predicate_context,
+                                ref :predicate_callback_applied,
+                            );
                         self
                             ._apply_invoke_and_deposits(
                                 :input,
-                                selector: INVOKE_WITH_COMPUTATION_SELECTOR,
+                                :selector,
+                                :context,
                                 ref :undeposited_open_notes,
                                 ref :screening_subject,
                             );
@@ -987,12 +1068,123 @@ pub mod Privacy {
                     },
                     ServerAction::EmitEncNoteCreated(event) => self.emit(event),
                     ServerAction::EmitNoteUsed(event) => self.emit(event),
-                    ServerAction::EmitPredicateNoteCreated(event) => self.emit(event),
-                    ServerAction::EmitPredicateNoteUsed(event) => self.emit(event),
+                    ServerAction::CreatePredicateNote(event) => {
+                        self._apply_predicate_note_created(:event);
+                        self.emit(event);
+                    },
+                    ServerAction::UsePredicateNote(event) => {
+                        self._apply_predicate_note_used(:event);
+                        self.emit(event);
+                    },
                 };
             }
             assert(undeposited_open_notes == Zero::zero(), errors::UNDEPOSITED_OPEN_NOTES);
+            assert(
+                predicate_address.is_none() || predicate_callback_applied,
+                errors::PREDICATE_CALLBACK_REQUIRED,
+            );
             screening_subject
+        }
+
+        fn _collect_predicate_actions(
+            self: @ContractState, actions: Span<ServerAction>,
+        ) -> (
+            Option<ContractAddress>,
+            Option<ClassHash>,
+            Array<PredicateNoteCreatedRef>,
+            Array<PredicateNoteSpentRef>,
+        ) {
+            let mut predicate_address: Option<ContractAddress> = None;
+            let mut predicate_class_hash: Option<ClassHash> = None;
+            let mut created_notes = array![];
+            let mut spent_notes = array![];
+            for action in actions {
+                match *action {
+                    ServerAction::CreatePredicateNote(event) => {
+                        self
+                            ._unify_predicate_target(
+                                ref :predicate_address,
+                                ref :predicate_class_hash,
+                                reference_address: event.predicate_address,
+                                reference_class_hash: event.predicate_class_hash,
+                            );
+                        created_notes
+                            .append(
+                                PredicateNoteCreatedRef {
+                                    note_id: event.note_id,
+                                    note_commitment: event.note_commitment,
+                                    predicate_commitment: event.predicate_commitment,
+                                    token: event.token,
+                                },
+                            );
+                    },
+                    ServerAction::UsePredicateNote(event) => {
+                        self
+                            ._unify_predicate_target(
+                                ref :predicate_address,
+                                ref :predicate_class_hash,
+                                reference_address: event.predicate_address,
+                                reference_class_hash: event.predicate_class_hash,
+                            );
+                        spent_notes
+                            .append(
+                                PredicateNoteSpentRef {
+                                    nullifier: event.nullifier,
+                                    predicate_commitment: event.predicate_commitment,
+                                    token: event.token,
+                                },
+                            );
+                    },
+                    _ => {},
+                }
+            }
+            (predicate_address, predicate_class_hash, created_notes, spent_notes)
+        }
+
+        fn _unify_predicate_target(
+            self: @ContractState,
+            ref predicate_address: Option<ContractAddress>,
+            ref predicate_class_hash: Option<ClassHash>,
+            reference_address: ContractAddress,
+            reference_class_hash: ClassHash,
+        ) {
+            if let Some(existing_address) = predicate_address {
+                assert(existing_address == reference_address, errors::MULTIPLE_PREDICATES);
+                assert(
+                    predicate_class_hash.unwrap() == reference_class_hash,
+                    errors::PREDICATE_CLASS_MISMATCH,
+                );
+            } else {
+                predicate_address = Option::Some(reference_address);
+                predicate_class_hash = Option::Some(reference_class_hash);
+            }
+        }
+
+        fn _predicate_invoke_parameters(
+            self: @ContractState,
+            input: InvokeInput,
+            standard_selector: felt252,
+            predicate_selector: felt252,
+            predicate_address: Option<ContractAddress>,
+            predicate_class_hash: Option<ClassHash>,
+            predicate_context: PredicateContext,
+            ref predicate_callback_applied: bool,
+        ) -> (felt252, Option<PredicateContext>) {
+            if let Some(required_address) = predicate_address {
+                assert(
+                    input.contract_address == required_address, errors::PREDICATE_TARGET_MISMATCH,
+                );
+                let current_class_hash = get_class_hash_at_syscall(required_address)
+                    .unwrap_syscall();
+                assert(
+                    current_class_hash == predicate_class_hash.unwrap(),
+                    errors::PREDICATE_CLASS_MISMATCH,
+                );
+                predicate_callback_applied = true;
+                (predicate_selector, Option::Some(predicate_context))
+            } else {
+                (standard_selector, Option::None)
+            }
         }
 
         /// Verifies the tx's screening attestation: it must be fresh (not older than
@@ -1046,6 +1238,49 @@ pub mod Privacy {
             }
         }
 
+        fn _apply_predicate_note_created(
+            ref self: ContractState, event: events::PredicateNoteCreated,
+        ) {
+            let events::PredicateNoteCreated {
+                note_id,
+                predicate_address,
+                predicate_commitment,
+                predicate_class_hash,
+                token,
+                note_commitment,
+            } = event;
+            assert(
+                self.predicate_notes.read(note_id).note_commitment.is_zero(),
+                errors::NON_ZERO_VALUE,
+            );
+            self
+                .predicate_notes
+                .entry(note_id)
+                .write(
+                    PredicateNote {
+                        note_commitment,
+                        predicate_address,
+                        predicate_class_hash,
+                        predicate_commitment,
+                        token,
+                    },
+                );
+        }
+
+        fn _apply_predicate_note_used(ref self: ContractState, event: events::PredicateNoteUsed) {
+            let events::PredicateNoteUsed {
+                nullifier, predicate_address, predicate_commitment, predicate_class_hash, token,
+            } = event;
+            assert(nullifier.is_non_zero(), errors::ZERO_NOTE_ID);
+            assert(predicate_address.is_non_zero(), errors::ZERO_PREDICATE_ADDRESS);
+            assert(predicate_commitment.is_non_zero(), errors::ZERO_PREDICATE_COMMITMENT);
+            assert(predicate_class_hash.is_non_zero(), errors::PREDICATE_CLASS_MISMATCH);
+            assert(token.is_non_zero(), errors::ZERO_TOKEN);
+            let nullifier_entry = self.predicate_nullifiers.entry(nullifier);
+            assert(!nullifier_entry.read(), errors::NON_ZERO_VALUE);
+            nullifier_entry.write(true);
+        }
+
         fn _apply_append(ref self: ContractState, input: AppendInput) {
             let AppendInput { recipient_addr, enc_channel_info } = input;
             self.recipient_channels.entry(recipient_addr).push(enc_channel_info);
@@ -1078,12 +1313,20 @@ pub mod Privacy {
             ref self: ContractState,
             input: InvokeInput,
             selector: felt252,
+            context: Option<PredicateContext>,
             ref undeposited_open_notes: usize,
             ref screening_subject: Option<ContractAddress>,
         ) {
             let InvokeInput { contract_address, calldata } = input;
+            let mut effective_calldata = array![];
+            if let Some(predicate_context) = context {
+                predicate_context.serialize(ref effective_calldata);
+            }
+            effective_calldata.append_span(calldata);
             let return_data = call_contract_syscall(
-                address: contract_address, entry_point_selector: selector, :calldata,
+                address: contract_address,
+                entry_point_selector: selector,
+                calldata: effective_calldata.span(),
             )
                 .unwrap_syscall();
             self.emit(events::ExternalContractInvoked { contract_address, selector });
@@ -1100,7 +1343,8 @@ pub mod Privacy {
                     OpenNoteScreeningPolicy::Exempt => {},
                     OpenNoteScreeningPolicy::Delegated => {
                         // Only a compute-invoke is delegated; a plain invoke is exempt.
-                        if selector == INVOKE_WITH_COMPUTATION_SELECTOR {
+                        if selector == INVOKE_WITH_COMPUTATION_SELECTOR
+                            || selector == PREDICATE_INVOKE_WITH_COMPUTATION_SELECTOR {
                             let associated_addresses = associated_addresses
                                 .expect(errors::INVALID_ASSOCIATED_ADDRESSES);
                             assert(!associated_addresses.is_empty(), errors::NO_ASSOCIATED_ADDRESS);
@@ -1190,8 +1434,16 @@ pub mod Privacy {
             self.notes.read(note_id)
         }
 
+        fn get_predicate_note(self: @ContractState, note_id: felt252) -> PredicateNote {
+            self.predicate_notes.read(note_id)
+        }
+
         fn nullifier_exists(self: @ContractState, nullifier: felt252) -> bool {
             self.nullifiers.read(nullifier)
+        }
+
+        fn predicate_nullifier_exists(self: @ContractState, nullifier: felt252) -> bool {
+            self.predicate_nullifiers.read(nullifier)
         }
 
         fn get_public_key(self: @ContractState, user_addr: ContractAddress) -> felt252 {

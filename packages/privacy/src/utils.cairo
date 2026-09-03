@@ -10,6 +10,7 @@ use openzeppelin::interfaces::introspection::{ISRC5SafeDispatcher, ISRC5SafeDisp
 use privacy::actions::{ClientAction, ServerAction, WriteOnceInput};
 use privacy::errors;
 use privacy::errors::internal_errors;
+use privacy::hashes::domain_separation::PREDICATE_ACTIONS_TAG;
 use privacy::hashes::{
     compute_enc_amount_hash, compute_enc_channel_key_hash, compute_enc_private_key_hash,
     compute_enc_recipient_addr_hash, compute_enc_sender_addr_hash, compute_enc_token_hash,
@@ -90,6 +91,13 @@ pub mod constants {
     pub const INVOKE_WITH_COMPUTATION_SELECTOR: felt252 = selector!(
         "privacy_invoke_with_computation",
     );
+    /// Predicate-authorizing counterpart to `privacy_invoke`. The pool prepends a canonical
+    /// [`PredicateContext`](privacy::objects::PredicateContext) to the original invoke calldata.
+    pub const PREDICATE_INVOKE_SELECTOR: felt252 = selector!("privacy_predicate_invoke");
+    /// Predicate-authorizing counterpart to `privacy_invoke_with_computation`.
+    pub const PREDICATE_INVOKE_WITH_COMPUTATION_SELECTOR: felt252 = selector!(
+        "privacy_predicate_invoke_with_computation",
+    );
     /// STRK fee token address — same on all Starknet networks (mainnet, sepolia, devnet).
     pub const STRK_TOKEN_ADDRESS: ContractAddress =
         0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d
@@ -102,7 +110,7 @@ pub mod constants {
     /// Maximum clock skew (in seconds) tolerated for a screening attestation dated in the future.
     pub const DEPOSITOR_VALIDATION_MAX_FUTURE: u64 = 60;
     /// Contract version, exposed via `get_version`.
-    pub const CONTRACT_VERSION: felt252 = '2.1';
+    pub const CONTRACT_VERSION: felt252 = '2.2';
 }
 
 /// Returns the generator point.
@@ -565,6 +573,15 @@ pub(crate) fn compute_message_hash(
     actions.serialize(ref payload);
     payload.serialize(ref l1_message_data);
     poseidon_hash_span(l1_message_data.span())
+}
+
+/// Commits to the exact proven server-action list under the current chain and pool.
+pub(crate) fn compute_predicate_actions_hash(
+    actions: Span<ServerAction>, chain_id: felt252, pool_address: ContractAddress,
+) -> felt252 {
+    let mut data = array![PREDICATE_ACTIONS_TAG, chain_id, pool_address.into()];
+    actions.serialize(ref data);
+    poseidon_hash_span(data.span())
 }
 
 /// Asserts that the call originates from the OS.

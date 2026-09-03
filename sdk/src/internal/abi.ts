@@ -248,6 +248,54 @@ export const PrivacyPoolABI = [
     ]
   },
   {
+    "type": "struct",
+    "name": "privacy::actions::CreatePredicateNoteInput",
+    "members": [
+      {
+        "name": "predicate_address",
+        "type": "core::starknet::contract_address::ContractAddress"
+      },
+      {
+        "name": "predicate_commitment",
+        "type": "core::felt252"
+      },
+      {
+        "name": "token",
+        "type": "core::starknet::contract_address::ContractAddress"
+      },
+      {
+        "name": "amount",
+        "type": "core::integer::u128"
+      },
+      {
+        "name": "nonce",
+        "type": "core::felt252"
+      },
+      {
+        "name": "blinding",
+        "type": "core::felt252"
+      }
+    ]
+  },
+  {
+    "type": "struct",
+    "name": "privacy::actions::UsePredicateNoteInput",
+    "members": [
+      {
+        "name": "note_id",
+        "type": "core::felt252"
+      },
+      {
+        "name": "amount",
+        "type": "core::integer::u128"
+      },
+      {
+        "name": "blinding",
+        "type": "core::felt252"
+      }
+    ]
+  },
+  {
     "type": "enum",
     "name": "privacy::actions::ClientAction",
     "variants": [
@@ -290,6 +338,14 @@ export const PrivacyPoolABI = [
       {
         "name": "ComputeAndInvoke",
         "type": "privacy::actions::ComputeAndInvokeInput"
+      },
+      {
+        "name": "CreatePredicateNote",
+        "type": "privacy::actions::CreatePredicateNoteInput"
+      },
+      {
+        "name": "UsePredicateNote",
+        "type": "privacy::actions::UsePredicateNoteInput"
       }
     ]
   },
@@ -536,6 +592,66 @@ export const PrivacyPoolABI = [
     ]
   },
   {
+    "type": "struct",
+    "name": "privacy::events::PredicateNoteCreated",
+    "members": [
+      {
+        "name": "note_id",
+        "type": "core::felt252"
+      },
+      {
+        "name": "predicate_address",
+        "type": "core::starknet::contract_address::ContractAddress"
+      },
+      {
+        "name": "predicate_commitment",
+        "type": "core::felt252"
+      },
+      {
+        "name": "predicate_class_hash",
+        "type": "core::starknet::class_hash::ClassHash"
+      },
+      {
+        "name": "token",
+        "type": "core::starknet::contract_address::ContractAddress"
+      },
+      {
+        "name": "note_commitment",
+        "type": "core::felt252"
+      }
+    ]
+  },
+  {
+    "type": "struct",
+    "name": "privacy::events::PredicateNoteUsed",
+    "members": [
+      {
+        "name": "note_id",
+        "type": "core::felt252"
+      },
+      {
+        "name": "nullifier",
+        "type": "core::felt252"
+      },
+      {
+        "name": "predicate_address",
+        "type": "core::starknet::contract_address::ContractAddress"
+      },
+      {
+        "name": "predicate_commitment",
+        "type": "core::felt252"
+      },
+      {
+        "name": "predicate_class_hash",
+        "type": "core::starknet::class_hash::ClassHash"
+      },
+      {
+        "name": "token",
+        "type": "core::starknet::contract_address::ContractAddress"
+      }
+    ]
+  },
+  {
     "type": "enum",
     "name": "privacy::actions::ServerAction",
     "variants": [
@@ -586,6 +702,14 @@ export const PrivacyPoolABI = [
       {
         "name": "InvokeWithComputation",
         "type": "privacy::actions::InvokeInput"
+      },
+      {
+        "name": "CreatePredicateNote",
+        "type": "privacy::events::PredicateNoteCreated"
+      },
+      {
+        "name": "UsePredicateNote",
+        "type": "privacy::events::PredicateNoteUsed"
       }
     ]
   },
@@ -794,6 +918,32 @@ export const PrivacyPoolABI = [
     ]
   },
   {
+    "type": "struct",
+    "name": "privacy::objects::PredicateNote",
+    "members": [
+      {
+        "name": "note_commitment",
+        "type": "core::felt252"
+      },
+      {
+        "name": "predicate_address",
+        "type": "core::starknet::contract_address::ContractAddress"
+      },
+      {
+        "name": "predicate_class_hash",
+        "type": "core::starknet::class_hash::ClassHash"
+      },
+      {
+        "name": "predicate_commitment",
+        "type": "core::felt252"
+      },
+      {
+        "name": "token",
+        "type": "core::starknet::contract_address::ContractAddress"
+      }
+    ]
+  },
+  {
     "type": "enum",
     "name": "privacy::objects::OpenNoteScreeningPolicy",
     "variants": [
@@ -933,7 +1083,39 @@ export const PrivacyPoolABI = [
       },
       {
         "type": "function",
+        "name": "get_predicate_note",
+        "inputs": [
+          {
+            "name": "note_id",
+            "type": "core::felt252"
+          }
+        ],
+        "outputs": [
+          {
+            "type": "privacy::objects::PredicateNote"
+          }
+        ],
+        "state_mutability": "view"
+      },
+      {
+        "type": "function",
         "name": "nullifier_exists",
+        "inputs": [
+          {
+            "name": "nullifier",
+            "type": "core::felt252"
+          }
+        ],
+        "outputs": [
+          {
+            "type": "core::bool"
+          }
+        ],
+        "state_mutability": "view"
+      },
+      {
+        "type": "function",
+        "name": "predicate_nullifier_exists",
         "inputs": [
           {
             "name": "nullifier",
@@ -1955,6 +2137,80 @@ export const PrivacyPoolABI = [
   },
   {
     "type": "event",
+    "name": "privacy::events::PredicateNoteCreated",
+    "kind": "struct",
+    "members": [
+      {
+        "name": "note_id",
+        "type": "core::felt252",
+        "kind": "key"
+      },
+      {
+        "name": "predicate_address",
+        "type": "core::starknet::contract_address::ContractAddress",
+        "kind": "key"
+      },
+      {
+        "name": "predicate_commitment",
+        "type": "core::felt252",
+        "kind": "key"
+      },
+      {
+        "name": "predicate_class_hash",
+        "type": "core::starknet::class_hash::ClassHash",
+        "kind": "data"
+      },
+      {
+        "name": "token",
+        "type": "core::starknet::contract_address::ContractAddress",
+        "kind": "data"
+      },
+      {
+        "name": "note_commitment",
+        "type": "core::felt252",
+        "kind": "data"
+      }
+    ]
+  },
+  {
+    "type": "event",
+    "name": "privacy::events::PredicateNoteUsed",
+    "kind": "struct",
+    "members": [
+      {
+        "name": "note_id",
+        "type": "core::felt252",
+        "kind": "key"
+      },
+      {
+        "name": "nullifier",
+        "type": "core::felt252",
+        "kind": "key"
+      },
+      {
+        "name": "predicate_address",
+        "type": "core::starknet::contract_address::ContractAddress",
+        "kind": "key"
+      },
+      {
+        "name": "predicate_commitment",
+        "type": "core::felt252",
+        "kind": "key"
+      },
+      {
+        "name": "predicate_class_hash",
+        "type": "core::starknet::class_hash::ClassHash",
+        "kind": "data"
+      },
+      {
+        "name": "token",
+        "type": "core::starknet::contract_address::ContractAddress",
+        "kind": "data"
+      }
+    ]
+  },
+  {
+    "type": "event",
     "name": "privacy::events::FeeAmountSet",
     "kind": "struct",
     "members": [
@@ -2089,6 +2345,16 @@ export const PrivacyPoolABI = [
       {
         "name": "NoteUsed",
         "type": "privacy::events::NoteUsed",
+        "kind": "nested"
+      },
+      {
+        "name": "PredicateNoteCreated",
+        "type": "privacy::events::PredicateNoteCreated",
+        "kind": "nested"
+      },
+      {
+        "name": "PredicateNoteUsed",
+        "type": "privacy::events::PredicateNoteUsed",
         "kind": "nested"
       },
       {

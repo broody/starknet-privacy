@@ -21,6 +21,9 @@ export {
   compute_subchannel_marker,
   compute_note_id,
   compute_nullifier,
+  compute_predicate_note_id,
+  compute_predicate_note_commitment,
+  compute_predicate_nullifier,
   compute_enc_amount_hash,
   compute_enc_token_hash,
   compute_enc_private_key_hash,
@@ -33,6 +36,7 @@ export { TracingRpcProvider, TracedRpcError, type DecodedError } from "./tracing
 export {
   ContractDiscoveryProvider,
   type PoolContractInterface,
+  type PredicateNote,
 } from "../internal/contract-discovery.js";
 export {
   createConcurrencyProfiler,

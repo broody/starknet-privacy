@@ -3,9 +3,9 @@ use core::poseidon::poseidon_hash_span;
 use openzeppelin::security::ReentrancyGuardComponent::Errors as ReentrancyGuardErrors;
 use privacy::actions::{
     AppendInput, ClientAction, ComputeAndInvokeInput, CreateEncNoteInput, CreateOpenNoteInput,
-    DepositInput, InvokeExternalInput, InvokeInput, OpenChannelInput, OpenSubchannelInput,
-    ServerAction, SetViewingKeyInput, TransferFromInput, TransferToInput, UseNoteInput,
-    WithdrawInput,
+    CreatePredicateNoteInput, DepositInput, InvokeExternalInput, InvokeInput, OpenChannelInput,
+    OpenSubchannelInput, ServerAction, SetViewingKeyInput, TransferFromInput, TransferToInput,
+    UseNoteInput, UsePredicateNoteInput, WithdrawInput,
 };
 use privacy::hashes::{
     compute_identity_key, compute_note_id, compute_nullifier, compute_subchannel_id,
@@ -53,6 +53,70 @@ use starkware_utils_testing::test_utils::{
     TokenHelperTrait, assert_expected_event_emitted, assert_panic_with_error,
     assert_panic_with_felt_error,
 };
+
+fn client_action_variant(action: ClientAction) -> felt252 {
+    let mut serialized = array![];
+    action.serialize(ref serialized);
+    *serialized[0]
+}
+
+fn server_action_variant(action: ServerAction) -> felt252 {
+    let mut serialized = array![];
+    action.serialize(ref serialized);
+    *serialized[0]
+}
+
+#[test]
+fn test_action_enum_discriminants_are_append_only() {
+    let invoke = InvokeInput { contract_address: 1.try_into().unwrap(), calldata: [].span() };
+    assert_eq!(
+        client_action_variant(
+            ClientAction::InvokeExternal(
+                InvokeExternalInput {
+                    contract_address: 1.try_into().unwrap(), calldata: [].span(),
+                },
+            ),
+        ),
+        8,
+    );
+    assert_eq!(
+        client_action_variant(
+            ClientAction::ComputeAndInvoke(
+                ComputeAndInvokeInput {
+                    contract_address: 1.try_into().unwrap(),
+                    compute_additional_data: [].span(),
+                    invoke_additional_data: [].span(),
+                },
+            ),
+        ),
+        9,
+    );
+    assert_eq!(
+        client_action_variant(
+            ClientAction::CreatePredicateNote(
+                CreatePredicateNoteInput {
+                    predicate_address: 1.try_into().unwrap(),
+                    predicate_commitment: 1,
+                    token: 1.try_into().unwrap(),
+                    amount: 1,
+                    nonce: 1,
+                    blinding: 1,
+                },
+            ),
+        ),
+        10,
+    );
+    assert_eq!(
+        client_action_variant(
+            ClientAction::UsePredicateNote(
+                UsePredicateNoteInput { note_id: 1, amount: 1, blinding: 1 },
+            ),
+        ),
+        11,
+    );
+    assert_eq!(server_action_variant(ServerAction::Invoke(invoke)), 10);
+    assert_eq!(server_action_variant(ServerAction::InvokeWithComputation(invoke)), 11);
+}
 
 #[test]
 fn test_validate() {

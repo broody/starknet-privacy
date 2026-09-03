@@ -69,6 +69,38 @@ const transfers = createPrivateTransfers({
 
 This section describes the recommended integration patterns. Each subsection gives one opinionated recipe — stick to it unless you have a specific reason to deviate.
 
+### Predicate-controlled escrow notes
+
+Use `createPredicateNote` and `usePredicateNote` for private-value notes whose lifecycle is
+authorized by an application contract. Always add `.invoke()` (or `.computeAndInvoke()`) targeting
+that same predicate; the pool routes it to the dedicated predicate callback and reverts all note and
+application state if authorization fails.
+
+```typescript
+await transfers
+  .build()
+  .with(STRK)
+  .inputs(fundingNote)
+  .createPredicateNote({
+    predicateAddress: auction,
+    predicateCommitment: settlementCommitment,
+    amount: bidAmount,
+    nonce: privateRandomNonce,
+    blinding: privateRandomBlinding,
+  })
+  .done()
+  .invoke(() => ({ contractAddress: auction, calldata: [auctionId] }))
+  .execute();
+```
+
+The `nonce`, `blinding`, and amount opening are secret prover inputs. Generate nonce and blinding
+independently with cryptographic randomness, retain them until spend, and never log or publish them.
+The predicate callback must verify the pool caller, deserialize and validate
+`PredicateContext.serialized_actions`, and bind any stored authorization to `actions_hash`; checking
+only the predicate commitment does not constrain where the escrowed value goes. A class-hash binding
+catches direct predicate replacement, but proxy predicates must enforce their own immutable
+policy/version commitment.
+
 ### State management: go stateless
 
 Do not persist `PrivateRegistry` between sessions. Rely on the default full-refresh discovery on every `execute()` call:
@@ -201,14 +233,14 @@ Rule of thumb: any on-chain state that the pool proof reads — account viewing 
 
 ### `createPrivateTransfers(params)`
 
-| Parameter                 | Type                              | Description                                                                                  |
-| ------------------------- | --------------------------------- | -------------------------------------------------------------------------------------------- |
-| `account`                 | `PrivateTransfersUser`            | `{ address, signer }` used to sign proof invocations. A full `Account` is also assignable.   |
-| `viewingKeyProvider`      | `ViewingKeyProvider`              | Provides the private viewing key used for encryption/decryption                              |
-| `provingProvider`         | `ProofProviderInterface`          | Backend that generates validity proofs                                                       |
-| `discoveryProvider`       | `DiscoveryProviderInterface`      | Backend for discovering notes and channels                                                   |
-| `poolContractAddress`     | `StarknetAddress`                 | Address of the deployed privacy pool contract                                                |
-| `proofInvocationFactory?` | `ProofInvocationFactoryInterface` | Optional override for proof invocation construction                                          |
+| Parameter                 | Type                              | Description                                                                                |
+| ------------------------- | --------------------------------- | ------------------------------------------------------------------------------------------ |
+| `account`                 | `PrivateTransfersUser`            | `{ address, signer }` used to sign proof invocations. A full `Account` is also assignable. |
+| `viewingKeyProvider`      | `ViewingKeyProvider`              | Provides the private viewing key used for encryption/decryption                            |
+| `provingProvider`         | `ProofProviderInterface`          | Backend that generates validity proofs                                                     |
+| `discoveryProvider`       | `DiscoveryProviderInterface`      | Backend for discovering notes and channels                                                 |
+| `poolContractAddress`     | `StarknetAddress`                 | Address of the deployed privacy pool contract                                              |
+| `proofInvocationFactory?` | `ProofInvocationFactoryInterface` | Optional override for proof invocation construction                                        |
 
 ### Discovery providers
 
@@ -504,9 +536,8 @@ For gasless transactions via a paymaster (e.g. Avnu), the wallet adds a dust wit
 const { callAndProof: simulated } = await transfers
   .build(options)
   .with(USDC, (t) =>
-    t
-      .transfer({ recipient: bob, amount: 50n })
-      .withdraw({ recipient: 0x1, amount: 1n }))
+    t.transfer({ recipient: bob, amount: 50n }).withdraw({ recipient: 0x1, amount: 1n })
+  )
   .surplusTo(self)
   .simulate({ provider });
 

@@ -1,7 +1,8 @@
 use privacy::hashes::{
     compute_channel_key, compute_channel_marker, compute_identity_key, compute_note_id,
-    compute_nullifier, compute_outgoing_channel_id, compute_predicate_channel_key,
-    compute_predicate_nullifier, compute_subchannel_id, compute_subchannel_marker, hash,
+    compute_nullifier, compute_outgoing_channel_id, compute_predicate_note_commitment,
+    compute_predicate_note_id, compute_predicate_nullifier, compute_subchannel_id,
+    compute_subchannel_marker, hash,
 };
 use starkware_utils::constants::MAX_U32;
 
@@ -255,64 +256,150 @@ fn test_compute_nullifier_different_inputs() {
 }
 
 #[test]
-fn test_compute_predicate_channel_key_different_inputs() {
+fn test_compute_predicate_note_id_different_inputs() {
+    let chain_id = 'CHAIN_ID';
+    let pool_address = hash(['POOL_ADDRESS'].span()).try_into().unwrap();
     let sender_addr = hash(['SENDER_ADDR'].span()).try_into().unwrap();
     let predicate_address = hash(['PREDICATE_ADDR'].span()).try_into().unwrap();
+    let predicate_class_hash = hash(['PREDICATE_CLASS'].span()).try_into().unwrap();
     let predicate_commitment = hash(['PREDICATE_COMMITMENT'].span());
-    let channel_key = compute_predicate_channel_key(
-        :sender_addr, :predicate_address, :predicate_commitment,
+    let token = hash(['TOKEN'].span()).try_into().unwrap();
+    let nonce = hash(['NONCE'].span());
+    let note_id = compute_predicate_note_id(
+        :chain_id,
+        :pool_address,
+        :sender_addr,
+        :predicate_address,
+        :predicate_class_hash,
+        :predicate_commitment,
+        :token,
+        :nonce,
     );
     let other_sender_addr = hash(['OTHER_SENDER_ADDR'].span()).try_into().unwrap();
-    let other_predicate_address = hash(['OTHER_PREDICATE_ADDR'].span()).try_into().unwrap();
-    let other_predicate_commitment = hash(['OTHER_PREDICATE_COMMITMENT'].span());
-
-    assert_ne!(sender_addr, other_sender_addr);
-    assert_ne!(predicate_address, other_predicate_address);
-    assert_ne!(predicate_commitment, other_predicate_commitment);
-
-    let key_diff_sender = compute_predicate_channel_key(
-        sender_addr: other_sender_addr, :predicate_address, :predicate_commitment,
+    let other_nonce = hash(['OTHER_NONCE'].span());
+    assert_ne!(
+        note_id,
+        compute_predicate_note_id(
+            :chain_id,
+            :pool_address,
+            sender_addr: other_sender_addr,
+            :predicate_address,
+            :predicate_class_hash,
+            :predicate_commitment,
+            :token,
+            :nonce,
+        ),
     );
-    let key_diff_pred_addr = compute_predicate_channel_key(
-        :sender_addr, predicate_address: other_predicate_address, :predicate_commitment,
+    assert_ne!(
+        note_id,
+        compute_predicate_note_id(
+            :chain_id,
+            :pool_address,
+            :sender_addr,
+            :predicate_address,
+            :predicate_class_hash,
+            :predicate_commitment,
+            :token,
+            nonce: other_nonce,
+        ),
     );
-    let key_diff_pred_commit = compute_predicate_channel_key(
-        :sender_addr, :predicate_address, predicate_commitment: other_predicate_commitment,
+    assert_ne!(
+        note_id,
+        compute_predicate_note_id(
+            chain_id: 'OTHER_CHAIN',
+            :pool_address,
+            :sender_addr,
+            :predicate_address,
+            :predicate_class_hash,
+            :predicate_commitment,
+            :token,
+            :nonce,
+        ),
     );
-
-    assert_ne!(channel_key, key_diff_sender);
-    assert_ne!(channel_key, key_diff_pred_addr);
-    assert_ne!(channel_key, key_diff_pred_commit);
 }
 
 #[test]
-fn test_compute_predicate_nullifier_different_inputs() {
-    let channel_key = hash(['CHANNEL_KEY'].span());
-    let token = hash(['TOKEN'].span()).try_into().unwrap();
-    let index: usize = 0;
+fn test_compute_predicate_note_commitment_hides_amount_and_blinding() {
+    let chain_id = 'CHAIN_ID';
+    let pool_address = hash(['POOL_ADDRESS'].span()).try_into().unwrap();
+    let note_id = hash(['NOTE_ID'].span());
     let predicate_address = hash(['PREDICATE_ADDR'].span()).try_into().unwrap();
-    let nullifier = compute_predicate_nullifier(:channel_key, :token, :index, :predicate_address);
+    let predicate_class_hash = hash(['PREDICATE_CLASS'].span()).try_into().unwrap();
+    let predicate_commitment = hash(['PREDICATE_COMMITMENT'].span());
+    let token = hash(['TOKEN'].span()).try_into().unwrap();
+    let amount: u128 = 42;
+    let blinding = hash(['BLINDING'].span());
+    let commitment = compute_predicate_note_commitment(
+        :chain_id,
+        :pool_address,
+        :note_id,
+        :predicate_address,
+        :predicate_class_hash,
+        :predicate_commitment,
+        :token,
+        :amount,
+        :blinding,
+    );
+    assert_ne!(
+        commitment,
+        compute_predicate_note_commitment(
+            :chain_id,
+            :pool_address,
+            :note_id,
+            :predicate_address,
+            :predicate_class_hash,
+            :predicate_commitment,
+            :token,
+            amount: amount + 1,
+            :blinding,
+        ),
+    );
+    assert_ne!(
+        commitment,
+        compute_predicate_note_commitment(
+            :chain_id,
+            :pool_address,
+            :note_id,
+            :predicate_address,
+            :predicate_class_hash,
+            :predicate_commitment,
+            :token,
+            :amount,
+            blinding: hash(['OTHER_BLINDING'].span()),
+        ),
+    );
+}
 
-    let other_channel_key = hash(['OTHER_CHANNEL_KEY'].span());
-    let other_token = hash(['OTHER_TOKEN'].span()).try_into().unwrap();
-    let other_index: usize = 1;
-    let other_predicate_address = hash(['OTHER_PREDICATE_ADDR'].span()).try_into().unwrap();
-
-    let null_diff_key = compute_predicate_nullifier(
-        channel_key: other_channel_key, :token, :index, :predicate_address,
+#[test]
+fn test_compute_predicate_nullifier_is_pool_and_chain_bound() {
+    let chain_id = 'CHAIN_ID';
+    let pool_address = hash(['POOL_ADDRESS'].span()).try_into().unwrap();
+    let note_id = hash(['NOTE_ID'].span());
+    let blinding = hash(['BLINDING'].span());
+    let nullifier = compute_predicate_nullifier(:chain_id, :pool_address, :note_id, :blinding);
+    assert_ne!(
+        nullifier,
+        compute_predicate_nullifier(chain_id: 'OTHER_CHAIN', :pool_address, :note_id, :blinding),
     );
-    let null_diff_token = compute_predicate_nullifier(
-        :channel_key, token: other_token, :index, :predicate_address,
+    assert_ne!(
+        nullifier,
+        compute_predicate_nullifier(
+            :chain_id,
+            pool_address: hash(['OTHER_POOL'].span()).try_into().unwrap(),
+            :note_id,
+            :blinding,
+        ),
     );
-    let null_diff_index = compute_predicate_nullifier(
-        :channel_key, :token, index: other_index, :predicate_address,
+    assert_ne!(
+        nullifier,
+        compute_predicate_nullifier(
+            :chain_id, :pool_address, note_id: hash(['OTHER_NOTE'].span()), :blinding,
+        ),
     );
-    let null_diff_pred = compute_predicate_nullifier(
-        :channel_key, :token, :index, predicate_address: other_predicate_address,
+    assert_ne!(
+        nullifier,
+        compute_predicate_nullifier(
+            :chain_id, :pool_address, :note_id, blinding: hash(['OTHER_BLINDING'].span()),
+        ),
     );
-
-    assert_ne!(nullifier, null_diff_key);
-    assert_ne!(nullifier, null_diff_token);
-    assert_ne!(nullifier, null_diff_index);
-    assert_ne!(nullifier, null_diff_pred);
 }

@@ -1,7 +1,7 @@
 use core::dict::{Felt252Dict, Felt252DictEntryTrait, SquashedFelt252Dict, SquashedFelt252DictTrait};
 use core::num::traits::{CheckedSub, Zero};
 use privacy::errors;
-use starknet::ContractAddress;
+use starknet::{ClassHash, ContractAddress};
 
 pub(crate) type TokenBalances = Felt252Dict<u128>;
 pub(crate) type SquashedTokenBalances = SquashedFelt252Dict<u128>;
@@ -135,14 +135,53 @@ pub struct OpenNoteDeposit {
     pub amount: u128,
 }
 
-/// Authorization for spending a predicate-escrowed note (returned by invoked contract).
-#[derive(Serde, Copy, Drop, PartialEq, Debug)]
-pub struct PredicateSpendAuth {
-    /// The identifier of the predicate note authorized to be spent.
-    pub note_id: felt252,
-    /// The predicate contract address that authorized the spend.
+/// A confidential note whose spend policy is enforced by a contract callback.
+#[derive(Serde, Copy, Drop, PartialEq, Debug, starknet::Store)]
+pub struct PredicateNote {
+    /// Hiding commitment to the note amount and its private blinding.
+    pub note_commitment: felt252,
+    /// Contract that must authorize creation and every spend.
     pub predicate_address: ContractAddress,
-    /// The authorized amount to spend.
-    pub amount: u128,
+    /// Class hash bound when the note is created. A direct class replacement freezes the note.
+    /// This cannot detect implementation changes behind a proxy; the predicate commitment and
+    /// callback must enforce any application-level version binding.
+    pub predicate_class_hash: ClassHash,
+    /// Application-specific policy commitment interpreted by the predicate contract.
+    pub predicate_commitment: felt252,
+    /// ERC20 token held by the note.
+    pub token: ContractAddress,
 }
 
+/// Public predicate-note creation metadata passed by the pool to the authorizing callback.
+#[derive(Serde, Copy, Drop, PartialEq, Debug)]
+pub struct PredicateNoteCreatedRef {
+    pub note_id: felt252,
+    pub note_commitment: felt252,
+    pub predicate_commitment: felt252,
+    pub token: ContractAddress,
+}
+
+/// Public predicate-note spend metadata. The original note ID stays private; the nullifier is
+/// derived from its secret blinding so observers cannot generically link creation and spend.
+#[derive(Serde, Copy, Drop, PartialEq, Debug)]
+pub struct PredicateNoteSpentRef {
+    pub nullifier: felt252,
+    pub predicate_commitment: felt252,
+    pub token: ContractAddress,
+}
+
+/// Pool-derived context prepended to a predicate callback's calldata.
+///
+/// `actions_hash` commits to the exact proven server-action list. Predicate contracts should bind
+/// their application decision to this value whenever output disposition matters.
+#[derive(Serde, Copy, Drop, PartialEq, Debug)]
+pub struct PredicateContext {
+    pub chain_id: felt252,
+    pub pool_address: ContractAddress,
+    pub actions_hash: felt252,
+    /// Canonical Serde encoding of the exact `Span<ServerAction>` committed by `actions_hash`.
+    /// Predicates can deserialize this to enforce output disposition without a prior state write.
+    pub serialized_actions: Span<felt252>,
+    pub created_notes: Span<PredicateNoteCreatedRef>,
+    pub spent_notes: Span<PredicateNoteSpentRef>,
+}

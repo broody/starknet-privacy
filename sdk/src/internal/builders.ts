@@ -4,6 +4,7 @@
 
 import {
   type CreateNoteAction,
+  type CreatePredicateNoteAction,
   type DepositAction,
   type ExecuteOptions,
   type ExecuteResult,
@@ -18,6 +19,7 @@ import {
   type StarknetAddressBigint,
   type TokenOperationsBuilder,
   type UseNoteAction,
+  type UsePredicateNoteAction,
   type WithdrawAction,
   type WithdrawOutput,
   type DepositInput,
@@ -30,6 +32,8 @@ import {
   type InvokeCalldataBuilderArgs,
   type SimulateOptions,
   type ShadowAccountsBuilder,
+  type PredicateNoteCreation,
+  type PredicateNoteSpend,
   type ViewingKey,
   Open,
   PrivateTransfersInterface,
@@ -46,8 +50,10 @@ export class TokenOperationsBuilderImpl implements TokenOperationsBuilder {
   // Actions stored without context - context resolved during execute
   public openTokenChannels: OpenTokenChannelAction[] = [];
   public useNotes: UseNoteAction[] = [];
+  public usePredicateNotes: UsePredicateNoteAction[] = [];
   public deposits: DepositAction[] = [];
   public createNotes: CreateNoteAction[] = [];
+  public createPredicateNotes: CreatePredicateNoteAction[] = [];
   public withdraws: WithdrawAction[] = [];
   // Surplus recipient (overrides parent builder's surplus recipient for this token)
   public surplusAction?: SurplusAction;
@@ -71,6 +77,18 @@ export class TokenOperationsBuilderImpl implements TokenOperationsBuilder {
   inputs(...notes: Note[]): this {
     for (const note of notes) {
       this.useNotes.push({ token: this.token, note });
+    }
+    return this;
+  }
+
+  usePredicateNote(...notes: PredicateNoteSpend[]): this {
+    for (const note of notes) {
+      this.usePredicateNotes.push({
+        token: this.token,
+        noteId: note.noteId,
+        amount: note.amount,
+        blinding: note.blinding,
+      });
     }
     return this;
   }
@@ -117,6 +135,20 @@ export class TokenOperationsBuilderImpl implements TokenOperationsBuilder {
           amount: output.amount as Amount,
         });
       }
+    }
+    return this;
+  }
+
+  createPredicateNote(...outputs: PredicateNoteCreation[]): this {
+    for (const output of outputs) {
+      this.createPredicateNotes.push({
+        token: this.token,
+        predicateAddress: output.predicateAddress,
+        predicateCommitment: output.predicateCommitment,
+        amount: output.amount,
+        nonce: output.nonce,
+        blinding: output.blinding,
+      });
     }
     return this;
   }
@@ -274,7 +306,9 @@ export class PrivateTransfersBuilderImpl implements PrivateTransfersBuilder {
     const openTokenChannels: OpenTokenChannelAction[] = [];
     const deposits: DepositAction[] = [];
     const useNotes: UseNoteAction[] = [];
+    const usePredicateNotes: UsePredicateNoteAction[] = [];
     const createNotes: CreateNoteAction[] = [];
+    const createPredicateNotes: CreatePredicateNoteAction[] = [];
     const withdraws: WithdrawAction[] = [];
     const surpluses: SurplusAction[] = [];
 
@@ -286,7 +320,9 @@ export class PrivateTransfersBuilderImpl implements PrivateTransfersBuilder {
       openTokenChannels.push(...tokenBuilder.openTokenChannels);
       deposits.push(...tokenBuilder.deposits);
       useNotes.push(...tokenBuilder.useNotes);
+      usePredicateNotes.push(...tokenBuilder.usePredicateNotes);
       createNotes.push(...tokenBuilder.createNotes);
+      createPredicateNotes.push(...tokenBuilder.createPredicateNotes);
       withdraws.push(...tokenBuilder.withdraws);
 
       const surplusToAction = tokenBuilder.surplusAction ?? this.defaultSurplusAction;
@@ -301,7 +337,9 @@ export class PrivateTransfersBuilderImpl implements PrivateTransfersBuilder {
       openTokenChannels,
       deposits,
       useNotes,
+      usePredicateNotes,
       createNotes,
+      createPredicateNotes,
       withdraws,
       surpluses,
       invoke: this.invokeExternal,

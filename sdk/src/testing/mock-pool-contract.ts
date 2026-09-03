@@ -27,6 +27,7 @@ import type {
   EncSubchannelInfo,
   EncOutgoingChannelInfo,
   EncPrivateKey,
+  PredicateNote,
 } from "../internal/pool-contract-interface.js";
 import { AdvancedMap, AddressMap } from "../utils/maps.js";
 import { assert, isOpen } from "../utils/validation.js";
@@ -120,6 +121,20 @@ export class MockPoolContract implements MockContract, PoolContractInterface {
 
   get_public_key(userAddr: StarknetAddressBigint): bigint {
     return this.publicKeys.has(userAddr) ? toBigInt(this.publicKeys.get(userAddr)!) : 0n;
+  }
+
+  get_predicate_note(_noteId: bigint): PredicateNote {
+    return {
+      note_commitment: 0n,
+      predicate_address: 0n,
+      predicate_class_hash: 0n,
+      predicate_commitment: 0n,
+      token: 0n,
+    };
+  }
+
+  predicate_nullifier_exists(_nullifier: bigint): boolean {
+    return false;
   }
 
   get_num_of_channels(recipientAddr: StarknetAddressBigint): bigint {

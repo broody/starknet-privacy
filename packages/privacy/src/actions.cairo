@@ -155,23 +155,23 @@ pub struct CreatePredicateNoteInput {
     pub token: ContractAddress,
     /// The amount the note represents.
     pub amount: u128,
-    /// The index of the note.
-    pub index: usize,
-    /// Salt for blinding the encrypted amount.
-    pub salt: u128,
+    /// Private random nonce used to derive an unlinkable note ID.
+    pub nonce: felt252,
+    /// Private random blinding used in the amount commitment.
+    pub blinding: felt252,
 }
 
 pub(crate) impl CreatePredicateNoteInputValid of InputValidation<CreatePredicateNoteInput> {
     fn assert_valid(self: CreatePredicateNoteInput) {
         let CreatePredicateNoteInput {
-            predicate_address, predicate_commitment, token, amount: _, index: _, salt,
+            predicate_address, predicate_commitment, token, amount, nonce, blinding,
         } = self;
         assert(predicate_address.is_non_zero(), errors::ZERO_PREDICATE_ADDRESS);
         assert(predicate_commitment.is_non_zero(), errors::ZERO_PREDICATE_COMMITMENT);
         assert(token.is_non_zero(), errors::ZERO_TOKEN);
-        assert(salt.is_non_zero(), errors::ZERO_SALT);
-        assert(salt > OPEN_NOTE_SALT, errors::SALT_TOO_SMALL);
-        assert(salt < TWO_POW_120, errors::SALT_EXCEEDS_120_BITS);
+        assert(amount.is_non_zero(), errors::ZERO_AMOUNT);
+        assert(nonce.is_non_zero(), errors::ZERO_PREDICATE_NONCE);
+        assert(blinding.is_non_zero(), errors::ZERO_PREDICATE_BLINDING);
     }
 }
 
@@ -213,30 +213,20 @@ pub(crate) impl UseNoteInputValid of InputValidation<UseNoteInput> {
 /// Input for the `UsePredicateNote` action.
 #[derive(Serde, Copy, Drop, PartialEq, Debug)]
 pub struct UsePredicateNoteInput {
-    /// The original sender's address who created the escrow note.
-    pub sender_addr: ContractAddress,
-    /// The predicate contract address controlling spend authority.
-    pub predicate_address: ContractAddress,
-    /// The application-specific predicate commitment.
-    pub predicate_commitment: felt252,
-    /// The note's token address.
-    pub token: ContractAddress,
-    /// The index of the note.
-    pub index: usize,
-    /// The salt used when creating the note.
-    pub salt: u128,
+    /// Identifier emitted when the predicate note was created.
+    pub note_id: felt252,
+    /// Private amount opening.
+    pub amount: u128,
+    /// Private commitment blinding retained by an authorized prover.
+    pub blinding: felt252,
 }
 
 pub(crate) impl UsePredicateNoteInputValid of InputValidation<UsePredicateNoteInput> {
     fn assert_valid(self: UsePredicateNoteInput) {
-        let UsePredicateNoteInput {
-            sender_addr, predicate_address, predicate_commitment, token, index: _, salt,
-        } = self;
-        assert(sender_addr.is_non_zero(), errors::ZERO_USER_ADDR);
-        assert(predicate_address.is_non_zero(), errors::ZERO_PREDICATE_ADDRESS);
-        assert(predicate_commitment.is_non_zero(), errors::ZERO_PREDICATE_COMMITMENT);
-        assert(token.is_non_zero(), errors::ZERO_TOKEN);
-        assert(salt.is_non_zero(), errors::ZERO_SALT);
+        let UsePredicateNoteInput { note_id, amount, blinding } = self;
+        assert(note_id.is_non_zero(), errors::ZERO_NOTE_ID);
+        assert(amount.is_non_zero(), errors::ZERO_AMOUNT);
+        assert(blinding.is_non_zero(), errors::ZERO_PREDICATE_BLINDING);
     }
 }
 
@@ -320,14 +310,10 @@ pub enum ClientAction {
     /// Open notes enable interactions where the final amount is determined at execution time,
     /// such as AMM swaps or receiving funds directly through bridge transfers.
     CreateOpenNote: CreateOpenNoteInput,
-    /// Creates a new predicate-escrowed note locked to a smart contract.
-    CreatePredicateNote: CreatePredicateNoteInput,
     /// Deposit funds into the contract.
     Deposit: DepositInput,
     /// Uses up a note (creates a nullifier for it).
     UseNote: UseNoteInput,
-    /// Uses up a predicate-escrowed note.
-    UsePredicateNote: UsePredicateNoteInput,
     /// Withdraw funds from the contract.
     Withdraw: WithdrawInput,
     /// Invokes an external contract: forwards the contract address and calldata as a server-side
@@ -336,6 +322,10 @@ pub enum ClientAction {
     /// Runs `privacy_compute` on the client and forwards its result as a server-side
     /// `InvokeWithComputation` action.
     ComputeAndInvoke: ComputeAndInvokeInput,
+    /// Creates a confidential note locked to an atomically invoked predicate contract.
+    CreatePredicateNote: CreatePredicateNoteInput,
+    /// Opens and consumes a predicate note, subject to that contract's atomic authorization.
+    UsePredicateNote: UsePredicateNoteInput,
 }
 
 #[generate_trait]
@@ -455,10 +445,6 @@ pub enum ServerAction {
     EmitEncNoteCreated: events::EncNoteCreated,
     /// Emit [`NoteUsed`](privacy::events::NoteUsed) event.
     EmitNoteUsed: events::NoteUsed,
-    /// Emit [`PredicateNoteCreated`](privacy::events::PredicateNoteCreated) event.
-    EmitPredicateNoteCreated: events::PredicateNoteCreated,
-    /// Emit [`PredicateNoteUsed`](privacy::events::PredicateNoteUsed) event.
-    EmitPredicateNoteUsed: events::PredicateNoteUsed,
     /// Invoke an external contract via the
     /// [`INVOKE_SELECTOR`](privacy::utils::constants::INVOKE_SELECTOR) selector.
     Invoke: InvokeInput,
@@ -468,5 +454,8 @@ pub enum ServerAction {
     /// *NOTE:* The target selector should assert the caller is the privacy contract,
     /// otherwise anyone could invoke it directly and bypass the privacy pool.
     InvokeWithComputation: InvokeInput,
+    /// Store and emit a predicate-note creation. Appended to preserve all existing discriminants.
+    CreatePredicateNote: events::PredicateNoteCreated,
+    /// Nullify and emit a predicate-note spend. Appended to preserve existing discriminants.
+    UsePredicateNote: events::PredicateNoteUsed,
 }
-
