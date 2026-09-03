@@ -72,16 +72,16 @@ export type ComputeAndInvokeInput = {
   invoke_additional_data: bigint[];
 };
 
-export type CreatePredicateNoteInput = {
-  predicate_address: StarknetAddressBigint;
-  predicate_commitment: bigint;
+export type CreateContractNoteInput = {
+  controller_contract: StarknetAddressBigint;
+  controller_commitment: bigint;
   token: StarknetAddressBigint;
   amount: bigint;
   nonce: bigint;
   blinding: bigint;
 };
 
-export type UsePredicateNoteInput = {
+export type UseContractNoteInput = {
   note_id: bigint;
   amount: bigint;
   blinding: bigint;
@@ -101,8 +101,8 @@ export type ClientAction =
   | { type: "Withdraw"; input: WithdrawInput }
   | { type: "InvokeExternal"; input: InvokeExternalInput }
   | { type: "ComputeAndInvoke"; input: ComputeAndInvokeInput }
-  | { type: "CreatePredicateNote"; input: CreatePredicateNoteInput }
-  | { type: "UsePredicateNote"; input: UsePredicateNoteInput };
+  | { type: "CreateContractNote"; input: CreateContractNoteInput }
+  | { type: "UseContractNote"; input: UseContractNoteInput };
 
 /** All valid client action type names */
 export const CLIENT_ACTION_TYPES = [
@@ -116,8 +116,8 @@ export const CLIENT_ACTION_TYPES = [
   "Withdraw",
   "InvokeExternal",
   "ComputeAndInvoke",
-  "CreatePredicateNote",
-  "UsePredicateNote",
+  "CreateContractNote",
+  "UseContractNote",
 ] as const;
 
 export type ClientActionType = (typeof CLIENT_ACTION_TYPES)[number];

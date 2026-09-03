@@ -1,32 +1,32 @@
-//! Predicate callback used to exercise predicate-note authorization and context binding.
+//! Contract-note callback used to exercise contract-note authorization and context binding.
 
-use privacy::objects::{OpenNoteDeposit, PredicateContext};
+use privacy::objects::{ContractNoteContext, OpenNoteDeposit};
 
 #[starknet::interface]
-pub trait IMockPredicate<T> {
+pub trait IMockNoteController<T> {
     fn set_allowed(ref self: T, allowed: bool);
     fn set_expected_actions_hash(ref self: T, expected_actions_hash: felt252);
     fn callback_count(self: @T) -> u32;
     fn last_actions_hash(self: @T) -> felt252;
     fn last_created_note_id(self: @T) -> felt252;
     fn last_spent_nullifier(self: @T) -> felt252;
-    fn privacy_predicate_invoke(
-        ref self: T, context: PredicateContext, marker: felt252,
+    fn privacy_contract_note_invoke(
+        ref self: T, context: ContractNoteContext, marker: felt252,
     ) -> Span<OpenNoteDeposit>;
 }
 
 #[starknet::contract]
-pub mod MockPredicate {
+pub mod MockNoteController {
     use core::num::traits::Zero;
     use privacy::actions::ServerAction;
-    use privacy::objects::{OpenNoteDeposit, PredicateContext};
-    use privacy::utils::compute_predicate_actions_hash;
+    use privacy::objects::{ContractNoteContext, OpenNoteDeposit};
+    use privacy::utils::compute_contract_note_actions_hash;
     use starknet::storage::{StoragePointerReadAccess, StoragePointerWriteAccess};
     use starknet::{ContractAddress, get_caller_address, get_execution_info};
-    use super::IMockPredicate;
+    use super::IMockNoteController;
 
-    pub const CALLBACK_MARKER: felt252 = 'PREDICATE_CALLBACK';
-    pub const PREDICATE_DENIED: felt252 = 'PREDICATE_DENIED';
+    pub const CALLBACK_MARKER: felt252 = 'CONTRACT_NOTE_CALLBACK';
+    pub const CONTROLLER_DENIED: felt252 = 'CONTROLLER_DENIED';
     pub const WRONG_ACTIONS_HASH: felt252 = 'WRONG_ACTIONS_HASH';
 
     #[storage]
@@ -47,7 +47,7 @@ pub mod MockPredicate {
     }
 
     #[abi(embed_v0)]
-    impl MockPredicateImpl of IMockPredicate<ContractState> {
+    impl MockNoteControllerImpl of IMockNoteController<ContractState> {
         fn set_allowed(ref self: ContractState, allowed: bool) {
             self.allowed.write(allowed);
         }
@@ -72,14 +72,14 @@ pub mod MockPredicate {
             self.last_spent_nullifier.read()
         }
 
-        fn privacy_predicate_invoke(
-            ref self: ContractState, context: PredicateContext, marker: felt252,
+        fn privacy_contract_note_invoke(
+            ref self: ContractState, context: ContractNoteContext, marker: felt252,
         ) -> Span<OpenNoteDeposit> {
             assert(get_caller_address() == self.pool_address.read(), 'CALLER_NOT_POOL');
             assert(context.pool_address == self.pool_address.read(), 'WRONG_POOL');
             assert(context.chain_id == get_execution_info().tx_info.chain_id, 'WRONG_CHAIN');
             assert(marker == CALLBACK_MARKER, 'WRONG_MARKER');
-            assert(self.allowed.read(), PREDICATE_DENIED);
+            assert(self.allowed.read(), CONTROLLER_DENIED);
 
             let expected_actions_hash = self.expected_actions_hash.read();
             if expected_actions_hash.is_non_zero() {
@@ -91,7 +91,7 @@ pub mod MockPredicate {
             assert(serialized_actions.is_empty(), 'TRAILING_ACTION_DATA');
             assert(
                 context
-                    .actions_hash == compute_predicate_actions_hash(
+                    .actions_hash == compute_contract_note_actions_hash(
                         :actions, chain_id: context.chain_id, pool_address: context.pool_address,
                     ),
                 WRONG_ACTIONS_HASH,

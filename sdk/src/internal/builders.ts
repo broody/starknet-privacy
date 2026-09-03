@@ -4,7 +4,7 @@
 
 import {
   type CreateNoteAction,
-  type CreatePredicateNoteAction,
+  type CreateContractNoteAction,
   type DepositAction,
   type ExecuteOptions,
   type ExecuteResult,
@@ -19,7 +19,7 @@ import {
   type StarknetAddressBigint,
   type TokenOperationsBuilder,
   type UseNoteAction,
-  type UsePredicateNoteAction,
+  type UseContractNoteAction,
   type WithdrawAction,
   type WithdrawOutput,
   type DepositInput,
@@ -32,8 +32,8 @@ import {
   type InvokeCalldataBuilderArgs,
   type SimulateOptions,
   type ShadowAccountsBuilder,
-  type PredicateNoteCreation,
-  type PredicateNoteSpend,
+  type ContractNoteCreation,
+  type ContractNoteSpend,
   type ViewingKey,
   Open,
   PrivateTransfersInterface,
@@ -50,10 +50,10 @@ export class TokenOperationsBuilderImpl implements TokenOperationsBuilder {
   // Actions stored without context - context resolved during execute
   public openTokenChannels: OpenTokenChannelAction[] = [];
   public useNotes: UseNoteAction[] = [];
-  public usePredicateNotes: UsePredicateNoteAction[] = [];
+  public useContractNotes: UseContractNoteAction[] = [];
   public deposits: DepositAction[] = [];
   public createNotes: CreateNoteAction[] = [];
-  public createPredicateNotes: CreatePredicateNoteAction[] = [];
+  public createContractNotes: CreateContractNoteAction[] = [];
   public withdraws: WithdrawAction[] = [];
   // Surplus recipient (overrides parent builder's surplus recipient for this token)
   public surplusAction?: SurplusAction;
@@ -81,9 +81,9 @@ export class TokenOperationsBuilderImpl implements TokenOperationsBuilder {
     return this;
   }
 
-  usePredicateNote(...notes: PredicateNoteSpend[]): this {
+  useContractNote(...notes: ContractNoteSpend[]): this {
     for (const note of notes) {
-      this.usePredicateNotes.push({
+      this.useContractNotes.push({
         token: this.token,
         noteId: note.noteId,
         amount: note.amount,
@@ -139,12 +139,12 @@ export class TokenOperationsBuilderImpl implements TokenOperationsBuilder {
     return this;
   }
 
-  createPredicateNote(...outputs: PredicateNoteCreation[]): this {
+  createContractNote(...outputs: ContractNoteCreation[]): this {
     for (const output of outputs) {
-      this.createPredicateNotes.push({
+      this.createContractNotes.push({
         token: this.token,
-        predicateAddress: output.predicateAddress,
-        predicateCommitment: output.predicateCommitment,
+        controllerContract: output.controllerContract,
+        controllerCommitment: output.controllerCommitment,
         amount: output.amount,
         nonce: output.nonce,
         blinding: output.blinding,
@@ -306,9 +306,9 @@ export class PrivateTransfersBuilderImpl implements PrivateTransfersBuilder {
     const openTokenChannels: OpenTokenChannelAction[] = [];
     const deposits: DepositAction[] = [];
     const useNotes: UseNoteAction[] = [];
-    const usePredicateNotes: UsePredicateNoteAction[] = [];
+    const useContractNotes: UseContractNoteAction[] = [];
     const createNotes: CreateNoteAction[] = [];
-    const createPredicateNotes: CreatePredicateNoteAction[] = [];
+    const createContractNotes: CreateContractNoteAction[] = [];
     const withdraws: WithdrawAction[] = [];
     const surpluses: SurplusAction[] = [];
 
@@ -320,9 +320,9 @@ export class PrivateTransfersBuilderImpl implements PrivateTransfersBuilder {
       openTokenChannels.push(...tokenBuilder.openTokenChannels);
       deposits.push(...tokenBuilder.deposits);
       useNotes.push(...tokenBuilder.useNotes);
-      usePredicateNotes.push(...tokenBuilder.usePredicateNotes);
+      useContractNotes.push(...tokenBuilder.useContractNotes);
       createNotes.push(...tokenBuilder.createNotes);
-      createPredicateNotes.push(...tokenBuilder.createPredicateNotes);
+      createContractNotes.push(...tokenBuilder.createContractNotes);
       withdraws.push(...tokenBuilder.withdraws);
 
       const surplusToAction = tokenBuilder.surplusAction ?? this.defaultSurplusAction;
@@ -337,9 +337,9 @@ export class PrivateTransfersBuilderImpl implements PrivateTransfersBuilder {
       openTokenChannels,
       deposits,
       useNotes,
-      usePredicateNotes,
+      useContractNotes,
       createNotes,
-      createPredicateNotes,
+      createContractNotes,
       withdraws,
       surpluses,
       invoke: this.invokeExternal,

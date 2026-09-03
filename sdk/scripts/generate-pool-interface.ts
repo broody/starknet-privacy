@@ -64,7 +64,7 @@ const STRUCTS_TO_GENERATE = [
   "privacy::objects::EncOutgoingChannelInfo",
   "privacy::objects::Note",
   "privacy::objects::EncPrivateKey",
-  "privacy::objects::PredicateNote",
+  "privacy::objects::ContractNote",
 ];
 
 type AbiStruct = {

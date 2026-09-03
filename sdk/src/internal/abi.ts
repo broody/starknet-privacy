@@ -249,14 +249,14 @@ export const PrivacyPoolABI = [
   },
   {
     "type": "struct",
-    "name": "privacy::actions::CreatePredicateNoteInput",
+    "name": "privacy::actions::CreateContractNoteInput",
     "members": [
       {
-        "name": "predicate_address",
+        "name": "controller_contract",
         "type": "core::starknet::contract_address::ContractAddress"
       },
       {
-        "name": "predicate_commitment",
+        "name": "controller_commitment",
         "type": "core::felt252"
       },
       {
@@ -279,7 +279,7 @@ export const PrivacyPoolABI = [
   },
   {
     "type": "struct",
-    "name": "privacy::actions::UsePredicateNoteInput",
+    "name": "privacy::actions::UseContractNoteInput",
     "members": [
       {
         "name": "note_id",
@@ -340,12 +340,12 @@ export const PrivacyPoolABI = [
         "type": "privacy::actions::ComputeAndInvokeInput"
       },
       {
-        "name": "CreatePredicateNote",
-        "type": "privacy::actions::CreatePredicateNoteInput"
+        "name": "CreateContractNote",
+        "type": "privacy::actions::CreateContractNoteInput"
       },
       {
-        "name": "UsePredicateNote",
-        "type": "privacy::actions::UsePredicateNoteInput"
+        "name": "UseContractNote",
+        "type": "privacy::actions::UseContractNoteInput"
       }
     ]
   },
@@ -593,22 +593,22 @@ export const PrivacyPoolABI = [
   },
   {
     "type": "struct",
-    "name": "privacy::events::PredicateNoteCreated",
+    "name": "privacy::events::ContractNoteCreated",
     "members": [
       {
         "name": "note_id",
         "type": "core::felt252"
       },
       {
-        "name": "predicate_address",
+        "name": "controller_contract",
         "type": "core::starknet::contract_address::ContractAddress"
       },
       {
-        "name": "predicate_commitment",
+        "name": "controller_commitment",
         "type": "core::felt252"
       },
       {
-        "name": "predicate_class_hash",
+        "name": "controller_class_hash",
         "type": "core::starknet::class_hash::ClassHash"
       },
       {
@@ -623,26 +623,22 @@ export const PrivacyPoolABI = [
   },
   {
     "type": "struct",
-    "name": "privacy::events::PredicateNoteUsed",
+    "name": "privacy::events::ContractNoteUsed",
     "members": [
-      {
-        "name": "note_id",
-        "type": "core::felt252"
-      },
       {
         "name": "nullifier",
         "type": "core::felt252"
       },
       {
-        "name": "predicate_address",
+        "name": "controller_contract",
         "type": "core::starknet::contract_address::ContractAddress"
       },
       {
-        "name": "predicate_commitment",
+        "name": "controller_commitment",
         "type": "core::felt252"
       },
       {
-        "name": "predicate_class_hash",
+        "name": "controller_class_hash",
         "type": "core::starknet::class_hash::ClassHash"
       },
       {
@@ -704,12 +700,12 @@ export const PrivacyPoolABI = [
         "type": "privacy::actions::InvokeInput"
       },
       {
-        "name": "CreatePredicateNote",
-        "type": "privacy::events::PredicateNoteCreated"
+        "name": "CreateContractNote",
+        "type": "privacy::events::ContractNoteCreated"
       },
       {
-        "name": "UsePredicateNote",
-        "type": "privacy::events::PredicateNoteUsed"
+        "name": "UseContractNote",
+        "type": "privacy::events::ContractNoteUsed"
       }
     ]
   },
@@ -919,22 +915,22 @@ export const PrivacyPoolABI = [
   },
   {
     "type": "struct",
-    "name": "privacy::objects::PredicateNote",
+    "name": "privacy::objects::ContractNote",
     "members": [
       {
         "name": "note_commitment",
         "type": "core::felt252"
       },
       {
-        "name": "predicate_address",
+        "name": "controller_contract",
         "type": "core::starknet::contract_address::ContractAddress"
       },
       {
-        "name": "predicate_class_hash",
+        "name": "controller_class_hash",
         "type": "core::starknet::class_hash::ClassHash"
       },
       {
-        "name": "predicate_commitment",
+        "name": "controller_commitment",
         "type": "core::felt252"
       },
       {
@@ -1083,7 +1079,7 @@ export const PrivacyPoolABI = [
       },
       {
         "type": "function",
-        "name": "get_predicate_note",
+        "name": "get_contract_note",
         "inputs": [
           {
             "name": "note_id",
@@ -1092,7 +1088,7 @@ export const PrivacyPoolABI = [
         ],
         "outputs": [
           {
-            "type": "privacy::objects::PredicateNote"
+            "type": "privacy::objects::ContractNote"
           }
         ],
         "state_mutability": "view"
@@ -1115,7 +1111,7 @@ export const PrivacyPoolABI = [
       },
       {
         "type": "function",
-        "name": "predicate_nullifier_exists",
+        "name": "contract_note_nullifier_exists",
         "inputs": [
           {
             "name": "nullifier",
@@ -2137,7 +2133,7 @@ export const PrivacyPoolABI = [
   },
   {
     "type": "event",
-    "name": "privacy::events::PredicateNoteCreated",
+    "name": "privacy::events::ContractNoteCreated",
     "kind": "struct",
     "members": [
       {
@@ -2146,17 +2142,17 @@ export const PrivacyPoolABI = [
         "kind": "key"
       },
       {
-        "name": "predicate_address",
+        "name": "controller_contract",
         "type": "core::starknet::contract_address::ContractAddress",
         "kind": "key"
       },
       {
-        "name": "predicate_commitment",
+        "name": "controller_commitment",
         "type": "core::felt252",
         "kind": "key"
       },
       {
-        "name": "predicate_class_hash",
+        "name": "controller_class_hash",
         "type": "core::starknet::class_hash::ClassHash",
         "kind": "data"
       },
@@ -2174,31 +2170,26 @@ export const PrivacyPoolABI = [
   },
   {
     "type": "event",
-    "name": "privacy::events::PredicateNoteUsed",
+    "name": "privacy::events::ContractNoteUsed",
     "kind": "struct",
     "members": [
-      {
-        "name": "note_id",
-        "type": "core::felt252",
-        "kind": "key"
-      },
       {
         "name": "nullifier",
         "type": "core::felt252",
         "kind": "key"
       },
       {
-        "name": "predicate_address",
+        "name": "controller_contract",
         "type": "core::starknet::contract_address::ContractAddress",
         "kind": "key"
       },
       {
-        "name": "predicate_commitment",
+        "name": "controller_commitment",
         "type": "core::felt252",
         "kind": "key"
       },
       {
-        "name": "predicate_class_hash",
+        "name": "controller_class_hash",
         "type": "core::starknet::class_hash::ClassHash",
         "kind": "data"
       },
@@ -2348,13 +2339,13 @@ export const PrivacyPoolABI = [
         "kind": "nested"
       },
       {
-        "name": "PredicateNoteCreated",
-        "type": "privacy::events::PredicateNoteCreated",
+        "name": "ContractNoteCreated",
+        "type": "privacy::events::ContractNoteCreated",
         "kind": "nested"
       },
       {
-        "name": "PredicateNoteUsed",
-        "type": "privacy::events::PredicateNoteUsed",
+        "name": "ContractNoteUsed",
+        "type": "privacy::events::ContractNoteUsed",
         "kind": "nested"
       },
       {

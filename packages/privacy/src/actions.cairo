@@ -144,13 +144,13 @@ pub(crate) impl CreateOpenNoteInputValid of InputValidation<CreateOpenNoteInput>
     }
 }
 
-/// Input for the `CreatePredicateNote` action.
+/// Input for the `CreateContractNote` action.
 #[derive(Serde, Copy, Drop, PartialEq, Debug)]
-pub struct CreatePredicateNoteInput {
+pub struct CreateContractNoteInput {
     /// The contract address controlling spend authority.
-    pub predicate_address: ContractAddress,
-    /// The application-specific predicate commitment.
-    pub predicate_commitment: felt252,
+    pub controller_contract: ContractAddress,
+    /// The application-specific controller commitment.
+    pub controller_commitment: felt252,
     /// The token's address.
     pub token: ContractAddress,
     /// The amount the note represents.
@@ -161,17 +161,17 @@ pub struct CreatePredicateNoteInput {
     pub blinding: felt252,
 }
 
-pub(crate) impl CreatePredicateNoteInputValid of InputValidation<CreatePredicateNoteInput> {
-    fn assert_valid(self: CreatePredicateNoteInput) {
-        let CreatePredicateNoteInput {
-            predicate_address, predicate_commitment, token, amount, nonce, blinding,
+pub(crate) impl CreateContractNoteInputValid of InputValidation<CreateContractNoteInput> {
+    fn assert_valid(self: CreateContractNoteInput) {
+        let CreateContractNoteInput {
+            controller_contract, controller_commitment, token, amount, nonce, blinding,
         } = self;
-        assert(predicate_address.is_non_zero(), errors::ZERO_PREDICATE_ADDRESS);
-        assert(predicate_commitment.is_non_zero(), errors::ZERO_PREDICATE_COMMITMENT);
+        assert(controller_contract.is_non_zero(), errors::ZERO_CONTROLLER_CONTRACT);
+        assert(controller_commitment.is_non_zero(), errors::ZERO_CONTROLLER_COMMITMENT);
         assert(token.is_non_zero(), errors::ZERO_TOKEN);
         assert(amount.is_non_zero(), errors::ZERO_AMOUNT);
-        assert(nonce.is_non_zero(), errors::ZERO_PREDICATE_NONCE);
-        assert(blinding.is_non_zero(), errors::ZERO_PREDICATE_BLINDING);
+        assert(nonce.is_non_zero(), errors::ZERO_CONTRACT_NOTE_NONCE);
+        assert(blinding.is_non_zero(), errors::ZERO_CONTRACT_NOTE_BLINDING);
     }
 }
 
@@ -210,10 +210,10 @@ pub(crate) impl UseNoteInputValid of InputValidation<UseNoteInput> {
     }
 }
 
-/// Input for the `UsePredicateNote` action.
+/// Input for the `UseContractNote` action.
 #[derive(Serde, Copy, Drop, PartialEq, Debug)]
-pub struct UsePredicateNoteInput {
-    /// Identifier emitted when the predicate note was created.
+pub struct UseContractNoteInput {
+    /// Identifier emitted when the contract note was created.
     pub note_id: felt252,
     /// Private amount opening.
     pub amount: u128,
@@ -221,12 +221,12 @@ pub struct UsePredicateNoteInput {
     pub blinding: felt252,
 }
 
-pub(crate) impl UsePredicateNoteInputValid of InputValidation<UsePredicateNoteInput> {
-    fn assert_valid(self: UsePredicateNoteInput) {
-        let UsePredicateNoteInput { note_id, amount, blinding } = self;
+pub(crate) impl UseContractNoteInputValid of InputValidation<UseContractNoteInput> {
+    fn assert_valid(self: UseContractNoteInput) {
+        let UseContractNoteInput { note_id, amount, blinding } = self;
         assert(note_id.is_non_zero(), errors::ZERO_NOTE_ID);
         assert(amount.is_non_zero(), errors::ZERO_AMOUNT);
-        assert(blinding.is_non_zero(), errors::ZERO_PREDICATE_BLINDING);
+        assert(blinding.is_non_zero(), errors::ZERO_CONTRACT_NOTE_BLINDING);
     }
 }
 
@@ -322,10 +322,10 @@ pub enum ClientAction {
     /// Runs `privacy_compute` on the client and forwards its result as a server-side
     /// `InvokeWithComputation` action.
     ComputeAndInvoke: ComputeAndInvokeInput,
-    /// Creates a confidential note locked to an atomically invoked predicate contract.
-    CreatePredicateNote: CreatePredicateNoteInput,
-    /// Opens and consumes a predicate note, subject to that contract's atomic authorization.
-    UsePredicateNote: UsePredicateNoteInput,
+    /// Creates a confidential note locked to an atomically invoked controller contract.
+    CreateContractNote: CreateContractNoteInput,
+    /// Opens and consumes a contract note, subject to that contract's atomic authorization.
+    UseContractNote: UseContractNoteInput,
 }
 
 #[generate_trait]
@@ -348,9 +348,9 @@ pub(crate) impl ClientActionImpl of ClientActionTrait {
             ClientAction::Deposit(_) => Self::DEPOSIT_PHASE,
             ClientAction::CreateEncNote(_) => Self::CREATE_NOTES_PHASE,
             ClientAction::CreateOpenNote(_) => Self::CREATE_NOTES_PHASE,
-            ClientAction::CreatePredicateNote(_) => Self::CREATE_NOTES_PHASE,
+            ClientAction::CreateContractNote(_) => Self::CREATE_NOTES_PHASE,
             ClientAction::UseNote(_) => Self::USE_NOTES_PHASE,
-            ClientAction::UsePredicateNote(_) => Self::USE_NOTES_PHASE,
+            ClientAction::UseContractNote(_) => Self::USE_NOTES_PHASE,
             ClientAction::Withdraw(_) => Self::WITHDRAW_PHASE,
             ClientAction::InvokeExternal(_) => Self::INVOKE_PHASE,
             ClientAction::ComputeAndInvoke(_) => Self::INVOKE_PHASE,
@@ -454,8 +454,8 @@ pub enum ServerAction {
     /// *NOTE:* The target selector should assert the caller is the privacy contract,
     /// otherwise anyone could invoke it directly and bypass the privacy pool.
     InvokeWithComputation: InvokeInput,
-    /// Store and emit a predicate-note creation. Appended to preserve all existing discriminants.
-    CreatePredicateNote: events::PredicateNoteCreated,
-    /// Nullify and emit a predicate-note spend. Appended to preserve existing discriminants.
-    UsePredicateNote: events::PredicateNoteUsed,
+    /// Store and emit a contract-note creation. Appended to preserve all existing discriminants.
+    CreateContractNote: events::ContractNoteCreated,
+    /// Nullify and emit a contract-note spend. Appended to preserve existing discriminants.
+    UseContractNote: events::ContractNoteUsed,
 }

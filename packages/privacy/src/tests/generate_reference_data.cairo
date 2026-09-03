@@ -8,11 +8,11 @@ use core::poseidon::poseidon_hash_span;
 use privacy::actions::{ServerAction, WriteOnceInput};
 use privacy::hashes::domain_separation::*;
 use privacy::hashes::{
-    compute_channel_key, compute_channel_marker, compute_enc_amount_hash,
+    compute_channel_key, compute_channel_marker, compute_contract_note_commitment,
+    compute_contract_note_id, compute_contract_note_nullifier, compute_enc_amount_hash,
     compute_enc_channel_key_hash, compute_enc_private_key_hash, compute_enc_recipient_addr_hash,
     compute_enc_sender_addr_hash, compute_enc_token_hash, compute_note_id, compute_nullifier,
-    compute_outgoing_channel_id, compute_predicate_note_commitment, compute_predicate_note_id,
-    compute_predicate_nullifier, compute_subchannel_id, compute_subchannel_marker,
+    compute_outgoing_channel_id, compute_subchannel_id, compute_subchannel_marker,
 };
 use privacy::utils::constants::{VIRTUAL_SNOS, VIRTUAL_SNOS0};
 use privacy::utils::{
@@ -38,13 +38,13 @@ const AMOUNT: u128 = 1000;
 const AUDITOR_PRIVATE_KEY: felt252 = 0x54321;
 const USER_ADDR: felt252 = 0x999;
 const USER_PRIVATE_KEY: felt252 = 0x888;
-const PREDICATE_CHAIN_ID: felt252 = 0x1111;
-const PREDICATE_POOL: felt252 = 0x2222;
-const PREDICATE_ADDRESS: felt252 = 0x3333;
-const PREDICATE_CLASS_HASH: felt252 = 0x4444;
-const PREDICATE_COMMITMENT: felt252 = 0x5555;
-const PREDICATE_NONCE: felt252 = 0x6666;
-const PREDICATE_BLINDING: felt252 = 0x7777;
+const CONTRACT_NOTE_CHAIN_ID: felt252 = 0x1111;
+const CONTRACT_NOTE_POOL: felt252 = 0x2222;
+const CONTROLLER_CONTRACT: felt252 = 0x3333;
+const CONTROLLER_CLASS_HASH: felt252 = 0x4444;
+const CONTROLLER_COMMITMENT: felt252 = 0x5555;
+const CONTRACT_NOTE_NONCE: felt252 = 0x6666;
+const CONTRACT_NOTE_BLINDING: felt252 = 0x7777;
 
 fn to_address(addr: felt252) -> ContractAddress {
     addr.try_into().unwrap()
@@ -74,32 +74,32 @@ fn generate_reference_hashes() {
     );
     let note_id = compute_note_id(CHANNEL_KEY, token, INDEX);
     let nullifier = compute_nullifier(CHANNEL_KEY, token, INDEX, SENDER_PRIVATE_KEY);
-    let predicate_note_id = compute_predicate_note_id(
-        chain_id: PREDICATE_CHAIN_ID,
-        pool_address: to_address(PREDICATE_POOL),
+    let contract_note_id = compute_contract_note_id(
+        chain_id: CONTRACT_NOTE_CHAIN_ID,
+        pool_address: to_address(CONTRACT_NOTE_POOL),
         sender_addr: sender,
-        predicate_address: to_address(PREDICATE_ADDRESS),
-        predicate_class_hash: to_class_hash(PREDICATE_CLASS_HASH),
-        predicate_commitment: PREDICATE_COMMITMENT,
+        controller_contract: to_address(CONTROLLER_CONTRACT),
+        controller_class_hash: to_class_hash(CONTROLLER_CLASS_HASH),
+        controller_commitment: CONTROLLER_COMMITMENT,
         token: token,
-        nonce: PREDICATE_NONCE,
+        nonce: CONTRACT_NOTE_NONCE,
     );
-    let predicate_note_commitment = compute_predicate_note_commitment(
-        chain_id: PREDICATE_CHAIN_ID,
-        pool_address: to_address(PREDICATE_POOL),
-        note_id: predicate_note_id,
-        predicate_address: to_address(PREDICATE_ADDRESS),
-        predicate_class_hash: to_class_hash(PREDICATE_CLASS_HASH),
-        predicate_commitment: PREDICATE_COMMITMENT,
+    let contract_note_commitment = compute_contract_note_commitment(
+        chain_id: CONTRACT_NOTE_CHAIN_ID,
+        pool_address: to_address(CONTRACT_NOTE_POOL),
+        note_id: contract_note_id,
+        controller_contract: to_address(CONTROLLER_CONTRACT),
+        controller_class_hash: to_class_hash(CONTROLLER_CLASS_HASH),
+        controller_commitment: CONTROLLER_COMMITMENT,
         token: token,
         amount: AMOUNT,
-        blinding: PREDICATE_BLINDING,
+        blinding: CONTRACT_NOTE_BLINDING,
     );
-    let predicate_nullifier = compute_predicate_nullifier(
-        chain_id: PREDICATE_CHAIN_ID,
-        pool_address: to_address(PREDICATE_POOL),
-        note_id: predicate_note_id,
-        blinding: PREDICATE_BLINDING,
+    let contract_note_nullifier = compute_contract_note_nullifier(
+        chain_id: CONTRACT_NOTE_CHAIN_ID,
+        pool_address: to_address(CONTRACT_NOTE_POOL),
+        note_id: contract_note_id,
+        blinding: CONTRACT_NOTE_BLINDING,
     );
 
     // Outgoing channel id
@@ -170,13 +170,13 @@ fn generate_reference_hashes() {
     println!("inputs.auditorPublicKey: 0x{:x}", auditor_public_key);
     println!("inputs.userAddr: 0x{:x}", USER_ADDR);
     println!("inputs.userPrivateKey: 0x{:x}", USER_PRIVATE_KEY);
-    println!("inputs.predicateChainId: 0x{:x}", PREDICATE_CHAIN_ID);
-    println!("inputs.predicatePool: 0x{:x}", PREDICATE_POOL);
-    println!("inputs.predicateAddress: 0x{:x}", PREDICATE_ADDRESS);
-    println!("inputs.predicateClassHash: 0x{:x}", PREDICATE_CLASS_HASH);
-    println!("inputs.predicateCommitment: 0x{:x}", PREDICATE_COMMITMENT);
-    println!("inputs.predicateNonce: 0x{:x}", PREDICATE_NONCE);
-    println!("inputs.predicateBlinding: 0x{:x}", PREDICATE_BLINDING);
+    println!("inputs.contractNoteChainId: 0x{:x}", CONTRACT_NOTE_CHAIN_ID);
+    println!("inputs.contractNotePool: 0x{:x}", CONTRACT_NOTE_POOL);
+    println!("inputs.controllerContract: 0x{:x}", CONTROLLER_CONTRACT);
+    println!("inputs.controllerClassHash: 0x{:x}", CONTROLLER_CLASS_HASH);
+    println!("inputs.controllerCommitment: 0x{:x}", CONTROLLER_COMMITMENT);
+    println!("inputs.contractNoteNonce: 0x{:x}", CONTRACT_NOTE_NONCE);
+    println!("inputs.contractNoteBlinding: 0x{:x}", CONTRACT_NOTE_BLINDING);
 
     // Outputs (computed hashes)
     println!("outputs.channelKey: 0x{:x}", channel_key);
@@ -192,9 +192,9 @@ fn generate_reference_hashes() {
     println!("outputs.encSenderAddrHash: 0x{:x}", enc_sender_addr_hash);
     println!("outputs.encRecipientAddrHash: 0x{:x}", enc_recipient_addr_hash);
     println!("outputs.outgoingChannelId: 0x{:x}", outgoing_channel_id);
-    println!("outputs.predicateNoteId: 0x{:x}", predicate_note_id);
-    println!("outputs.predicateNoteCommitment: 0x{:x}", predicate_note_commitment);
-    println!("outputs.predicateNullifier: 0x{:x}", predicate_nullifier);
+    println!("outputs.contractNoteId: 0x{:x}", contract_note_id);
+    println!("outputs.contractNoteCommitment: 0x{:x}", contract_note_commitment);
+    println!("outputs.contractNoteNullifier: 0x{:x}", contract_note_nullifier);
 
     // Encryption outputs
     println!("outputs.encSubchannelSalt: 0x{:x}", enc_subchannel.salt);

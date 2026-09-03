@@ -69,21 +69,22 @@ const transfers = createPrivateTransfers({
 
 This section describes the recommended integration patterns. Each subsection gives one opinionated recipe — stick to it unless you have a specific reason to deviate.
 
-### Predicate-controlled escrow notes
+### Contract notes
 
-Use `createPredicateNote` and `usePredicateNote` for private-value notes whose lifecycle is
+Use `createContractNote` and `useContractNote` for private-value notes whose lifecycle is
 authorized by an application contract. Always add `.invoke()` (or `.computeAndInvoke()`) targeting
-that same predicate; the pool routes it to the dedicated predicate callback and reverts all note and
-application state if authorization fails.
+that same controller; the pool routes it to the dedicated contract-note callback and reverts all
+note and application state if authorization fails. Applications can give these notes a more
+specific name; for example, Whisper presents its auction-bound contract notes as escrow notes.
 
 ```typescript
 await transfers
   .build()
   .with(STRK)
   .inputs(fundingNote)
-  .createPredicateNote({
-    predicateAddress: auction,
-    predicateCommitment: settlementCommitment,
+  .createContractNote({
+    controllerContract: auction,
+    controllerCommitment: settlementCommitment,
     amount: bidAmount,
     nonce: privateRandomNonce,
     blinding: privateRandomBlinding,
@@ -95,10 +96,10 @@ await transfers
 
 The `nonce`, `blinding`, and amount opening are secret prover inputs. Generate nonce and blinding
 independently with cryptographic randomness, retain them until spend, and never log or publish them.
-The predicate callback must verify the pool caller, deserialize and validate
-`PredicateContext.serialized_actions`, and bind any stored authorization to `actions_hash`; checking
-only the predicate commitment does not constrain where the escrowed value goes. A class-hash binding
-catches direct predicate replacement, but proxy predicates must enforce their own immutable
+The contract-note callback must verify the pool caller, deserialize and validate
+`ContractNoteContext.serialized_actions`, and bind any stored authorization to `actions_hash`; checking
+only the controller commitment does not constrain where the controlled value goes. A class-hash binding
+catches direct controller replacement, but proxy controllers must enforce their own immutable
 policy/version commitment.
 
 ### State management: go stateless

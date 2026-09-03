@@ -54,12 +54,12 @@ type ClientActions = {
   openTokenChannels: Extract<ClientAction, { type: "OpenSubchannel" }>[];
   deposits: Extract<ClientAction, { type: "Deposit" }>[];
   useNotes: Extract<ClientAction, { type: "UseNote" }>[];
-  usePredicateNotes: Extract<ClientAction, { type: "UsePredicateNote" }>[];
+  useContractNotes: Extract<ClientAction, { type: "UseContractNote" }>[];
   createNotes: (
     | Extract<ClientAction, { type: "CreateEncNote" }>
     | Extract<ClientAction, { type: "CreateOpenNote" }>
   )[];
-  createPredicateNotes: Extract<ClientAction, { type: "CreatePredicateNote" }>[];
+  createContractNotes: Extract<ClientAction, { type: "CreateContractNote" }>[];
   withdraws: Extract<ClientAction, { type: "Withdraw" }>[];
   invoke?: Extract<ClientAction, { type: "InvokeExternal" }>;
   computeAndInvoke?: Extract<ClientAction, { type: "ComputeAndInvoke" }>;
@@ -235,9 +235,9 @@ export class ActionCompiler {
       openTokenChannels: [],
       deposits: [],
       useNotes: [],
-      usePredicateNotes: [],
+      useContractNotes: [],
       createNotes: [],
-      createPredicateNotes: [],
+      createContractNotes: [],
       withdraws: [],
       invoke: undefined,
       computeAndInvoke: undefined,
@@ -393,22 +393,22 @@ export class ActionCompiler {
       }
     }
 
-    if (actions.usePredicateNotes) {
-      for (const action of actions.usePredicateNotes) {
+    if (actions.useContractNotes) {
+      for (const action of actions.useContractNotes) {
         const noteId = toBigInt(action.noteId);
         const blinding = toBigInt(action.blinding);
-        assert(noteId !== 0n, () => "Predicate note ID must be non-zero");
-        assert(action.amount > 0n, () => "Predicate note amount must be positive");
-        assert(blinding !== 0n, () => "Predicate note blinding must be non-zero");
+        assert(noteId !== 0n, () => "Contract note ID must be non-zero");
+        assert(action.amount > 0n, () => "Contract note amount must be positive");
+        assert(blinding !== 0n, () => "Contract note blinding must be non-zero");
         const input = {
-          type: "UsePredicateNote",
+          type: "UseContractNote",
           input: {
             note_id: noteId,
             amount: action.amount,
             blinding,
           },
         } as const;
-        execute(input, clientActions.usePredicateNotes);
+        execute(input, clientActions.useContractNotes);
       }
     }
 
@@ -452,30 +452,30 @@ export class ActionCompiler {
       }
     }
 
-    if (actions.createPredicateNotes) {
-      for (const action of actions.createPredicateNotes) {
-        const predicateAddress = toBigInt(action.predicateAddress);
-        const predicateCommitment = toBigInt(action.predicateCommitment);
+    if (actions.createContractNotes) {
+      for (const action of actions.createContractNotes) {
+        const controllerContract = toBigInt(action.controllerContract);
+        const controllerCommitment = toBigInt(action.controllerCommitment);
         const nonce = toBigInt(action.nonce);
         const blinding = toBigInt(action.blinding);
-        assert(predicateAddress !== 0n, () => "Predicate address must be non-zero");
-        assert(predicateCommitment !== 0n, () => "Predicate commitment must be non-zero");
-        assert(action.token !== 0n, () => "Predicate note token must be non-zero");
-        assert(action.amount > 0n, () => "Predicate note amount must be positive");
-        assert(nonce !== 0n, () => "Predicate note nonce must be non-zero");
-        assert(blinding !== 0n, () => "Predicate note blinding must be non-zero");
+        assert(controllerContract !== 0n, () => "Controller contract must be non-zero");
+        assert(controllerCommitment !== 0n, () => "Controller commitment must be non-zero");
+        assert(action.token !== 0n, () => "Contract note token must be non-zero");
+        assert(action.amount > 0n, () => "Contract note amount must be positive");
+        assert(nonce !== 0n, () => "Contract note nonce must be non-zero");
+        assert(blinding !== 0n, () => "Contract note blinding must be non-zero");
         const input = {
-          type: "CreatePredicateNote",
+          type: "CreateContractNote",
           input: {
-            predicate_address: predicateAddress,
-            predicate_commitment: predicateCommitment,
+            controller_contract: controllerContract,
+            controller_commitment: controllerCommitment,
             token: action.token,
             amount: action.amount,
             nonce,
             blinding,
           },
         } as const;
-        execute(input, clientActions.createPredicateNotes);
+        execute(input, clientActions.createContractNotes);
       }
     }
 
@@ -497,18 +497,17 @@ export class ActionCompiler {
 
     // surpluses were handled in resolveNotes
 
-    const predicateTargets = new Set(
-      (actions.createPredicateNotes ?? []).map((note) => toBigInt(note.predicateAddress))
+    const controllerTargets = new Set(
+      (actions.createContractNotes ?? []).map((note) => toBigInt(note.controllerContract))
     );
-    assert(predicateTargets.size <= 1, () => "A transaction may target only one predicate");
-    const hasPredicateActions =
-      (actions.usePredicateNotes?.length ?? 0) > 0 ||
-      (actions.createPredicateNotes?.length ?? 0) > 0;
+    assert(controllerTargets.size <= 1, () => "A transaction may target only one note controller");
+    const hasContractNoteActions =
+      (actions.useContractNotes?.length ?? 0) > 0 || (actions.createContractNotes?.length ?? 0) > 0;
     assert(
-      !hasPredicateActions ||
+      !hasContractNoteActions ||
         actions.invoke !== undefined ||
         actions.computeAndInvoke !== undefined,
-      () => "Predicate-note creation and spend require .invoke() or .computeAndInvoke()"
+      () => "Contract-note creation and spend require .invoke() or .computeAndInvoke()"
     );
 
     // `invoke` and `computeAndInvoke` share the single invoke phase the pool allows per
@@ -523,10 +522,10 @@ export class ActionCompiler {
     if (actions.invoke) {
       const call = actions.invoke.callBuilder(this.invokeBuilderArgs(clientActions, pool));
       const target = toBigInt(call.contractAddress);
-      const createdPredicateTarget = predicateTargets.values().next().value;
+      const createdContractNoteController = controllerTargets.values().next().value;
       assert(
-        createdPredicateTarget === undefined || target === createdPredicateTarget,
-        () => "The invoke target must match the predicate controlling created notes"
+        createdContractNoteController === undefined || target === createdContractNoteController,
+        () => "The invoke target must match the controller of created contract notes"
       );
       const calldata = CallData.compile(call.calldata ?? []).map(toBigInt);
 
@@ -546,10 +545,10 @@ export class ActionCompiler {
         this.invokeBuilderArgs(clientActions, pool)
       );
       const target = toBigInt(details.contractAddress);
-      const createdPredicateTarget = predicateTargets.values().next().value;
+      const createdContractNoteController = controllerTargets.values().next().value;
       assert(
-        createdPredicateTarget === undefined || target === createdPredicateTarget,
-        () => "The invoke target must match the predicate controlling created notes"
+        createdContractNoteController === undefined || target === createdContractNoteController,
+        () => "The invoke target must match the controller of created contract notes"
       );
       const compute_additional_data = CallData.compile(details.computeAdditionalData ?? []).map(
         toBigInt
@@ -710,10 +709,10 @@ export class ActionCompiler {
     }
 
     // The token is local planning metadata. The pool reads and verifies it from the committed
-    // predicate note when compiling the private transaction.
-    if (actions.usePredicateNotes) {
-      for (const note of actions.usePredicateNotes) {
-        assert(note.amount > 0n, () => `Predicate note ${note.noteId}: amount must be positive`);
+    // contract note when compiling the private transaction.
+    if (actions.useContractNotes) {
+      for (const note of actions.useContractNotes) {
+        assert(note.amount > 0n, () => `Contract note ${note.noteId}: amount must be positive`);
         update(note.token, note.amount);
       }
     }
@@ -739,9 +738,9 @@ export class ActionCompiler {
       }
     }
 
-    if (actions.createPredicateNotes) {
-      for (const note of actions.createPredicateNotes) {
-        assert(note.amount > 0n, () => `Predicate note amount must be positive`);
+    if (actions.createContractNotes) {
+      for (const note of actions.createContractNotes) {
+        assert(note.amount > 0n, () => `Contract note amount must be positive`);
         update(note.token, -note.amount);
       }
     }

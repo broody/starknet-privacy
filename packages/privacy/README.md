@@ -16,7 +16,7 @@ User transaction entry point. `__execute__` validates context, compiles `ClientA
 
 ### IViews
 
-Read-only queries: channel/subchannel existence, regular and predicate note lookup, nullifier checks, public key retrieval, fee info.
+Read-only queries: channel/subchannel existence, regular and contract note lookup, nullifier checks, public key retrieval, fee info.
 
 ### IAdmin
 
@@ -33,52 +33,52 @@ Actions must be ordered by phase. Actions within the same phase can appear in an
 | 2 | `OpenSubchannel` | Open token-specific subchannel |
 | 3 | `Deposit` | Deposit tokens into contract |
 | 4 | `UseNote` | Spend a recipient note (creates nullifier) |
-| 4 | `UsePredicateNote` | Privately open a predicate note (requires predicate callback) |
+| 4 | `UseContractNote` | Privately open a contract note (requires contract-note callback) |
 | 5 | `CreateEncNote` | Create encrypted note |
 | 5 | `CreateOpenNote` | Create open (unencrypted) note |
-| 5 | `CreatePredicateNote` | Create a predicate-controlled note (requires predicate callback) |
+| 5 | `CreateContractNote` | Create a contract-controlled note (requires contract-note callback) |
 | 6 | `Withdraw` | Withdraw tokens |
 | 7 | `InvokeExternal` | Call external contract (at most once per tx) |
 | 7 | `ComputeAndInvoke` | Compute privately, then call an external contract (at most once per tx) |
 
-## Predicate notes
+## Contract notes
 
-Predicate notes hold a private amount under an application contract's policy. Creation commits to
+Contract notes hold a private amount under an application contract's policy. Creation commits to
 `amount` with a private random `blinding`, and derives the public note ID with an independent private
 random `nonce`. A spend proves the opening privately and emits only a secret-derived nullifier; the
 pool does not generically reveal which creation was consumed. Application-level
-`predicate_commitment` values may still be linkable if the application makes them unique or public.
+`controller_commitment` values may still be linkable if the application makes them unique or public.
 
-Every transaction that creates or spends predicate notes must contain exactly one invoke-phase
-action targeting their predicate contract. The pool changes the selector to
-`privacy_predicate_invoke` (or `privacy_predicate_invoke_with_computation`) and prepends a
-`PredicateContext`:
+Every transaction that creates or spends contract notes must contain exactly one invoke-phase
+action targeting their controller contract. The pool changes the selector to
+`privacy_contract_note_invoke` (or `privacy_contract_note_invoke_with_computation`) and prepends a
+`ContractNoteContext`:
 
 ```cairo
-pub struct PredicateContext {
+pub struct ContractNoteContext {
     chain_id: felt252,
     pool_address: ContractAddress,
     actions_hash: felt252,
     serialized_actions: Span<felt252>,
-    created_notes: Span<PredicateNoteCreatedRef>,
-    spent_notes: Span<PredicateNoteSpentRef>,
+    created_notes: Span<ContractNoteCreatedRef>,
+    spent_notes: Span<ContractNoteSpentRef>,
 }
 ```
 
-The callback's successful return authorizes the complete transaction atomically. Predicate
+The callback's successful return authorizes the complete transaction atomically. Controller
 contracts must:
 
 - assert that the caller is the expected privacy pool;
-- validate `chain_id`, `pool_address`, and the application-specific `predicate_commitment`;
+- validate `chain_id`, `pool_address`, and the application-specific `controller_commitment`;
 - deserialize and validate `serialized_actions` to enforce the permitted asset disposition, and
   bind any stored/committed authorization to `actions_hash`; and
 - return a correctly serialized `Span<OpenNoteDeposit>` (empty when it creates no open-note
   deposits).
 
-Only one predicate address and class hash may appear in a transaction. The pool binds notes to the
-predicate's class hash and freezes them after a direct class replacement. This does **not** detect an
-implementation change behind a proxy: proxy-based predicates must include and enforce an immutable
-policy/version commitment themselves.
+Only one controller contract and class hash may appear in a transaction. The pool binds notes to
+the controller class hash and freezes them after a direct class replacement. This does **not**
+detect an implementation change behind a proxy: proxy-based controllers must include and enforce
+an immutable policy/version commitment themselves.
 
 Both `nonce` and `blinding` are secrets supplied to the prover. They must be independently generated
 with cryptographic randomness, retained by the party that will spend the note, and never placed in
@@ -87,7 +87,7 @@ public calldata, events, logs, or application state.
 ## Cryptographic primitives
 
 - All hashes use Poseidon with domain-separation tags (see [`hashes.cairo`](src/hashes.cairo) for formulas)
-- Key derivations: `channel_key`, `channel_marker`, `subchannel_marker`, `subchannel_id`, `outgoing_channel_id`, `note_id`, `nullifier`, predicate note IDs/commitments/nullifiers
+- Key derivations: `channel_key`, `channel_marker`, `subchannel_marker`, `subchannel_id`, `outgoing_channel_id`, `note_id`, `nullifier`, contract note IDs/commitments/nullifiers
 - Encryption: ECDH with ephemeral keys; encrypted fields include channel keys, addresses, note amounts, tokens, and private keys
 
 ## Security
@@ -129,8 +129,8 @@ public calldata, events, logs, or application state.
 | `Deposit` | `Deposit` action |
 | `Withdrawal` | `Withdraw` action |
 | `NoteUsed` | `UseNote` action |
-| `PredicateNoteCreated` | `CreatePredicateNote` action after predicate authorization |
-| `PredicateNoteUsed` | `UsePredicateNote` action after predicate authorization |
+| `ContractNoteCreated` | `CreateContractNote` action after contract-note authorization |
+| `ContractNoteUsed` | `UseContractNote` action after contract-note authorization |
 | `OpenNoteCreated` | `CreateOpenNote` action |
 | `OpenNoteDeposited` | `deposit_to_open_note()` |
 | `AuditorPublicKeySet` | `set_auditor_public_key()` |

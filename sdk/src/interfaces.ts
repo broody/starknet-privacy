@@ -196,10 +196,10 @@ export type UseNoteAction = {
   note: Note;
 };
 
-/** Private opening used to create a note controlled by a predicate contract. */
-export type PredicateNoteCreation = {
-  predicateAddress: StarknetAddress;
-  predicateCommitment: BigNumberish;
+/** Private opening used to create a note controlled by a controller contract. */
+export type ContractNoteCreation = {
+  controllerContract: StarknetAddress;
+  controllerCommitment: BigNumberish;
   amount: Amount;
   /** Secret, non-zero random felt retained by the creator until the note is spent. */
   nonce: BigNumberish;
@@ -207,18 +207,18 @@ export type PredicateNoteCreation = {
   blinding: BigNumberish;
 };
 
-/** Private opening of an existing predicate note. */
-export type PredicateNoteSpend = {
+/** Private opening of an existing contract note. */
+export type ContractNoteSpend = {
   noteId: NoteId;
   amount: Amount;
   blinding: BigNumberish;
 };
 
-export type CreatePredicateNoteAction = PredicateNoteCreation & {
+export type CreateContractNoteAction = ContractNoteCreation & {
   token: StarknetAddressBigint;
 };
 
-export type UsePredicateNoteAction = PredicateNoteSpend & {
+export type UseContractNoteAction = ContractNoteSpend & {
   /** Used for local balance planning; the pool verifies the token from committed note state. */
   token: StarknetAddressBigint;
 };
@@ -283,9 +283,9 @@ export type Actions = {
   openTokenChannels?: OpenTokenChannelAction[];
   deposits?: DepositAction[];
   useNotes?: UseNoteAction[];
-  usePredicateNotes?: UsePredicateNoteAction[];
+  useContractNotes?: UseContractNoteAction[];
   createNotes?: CreateNoteAction[];
-  createPredicateNotes?: CreatePredicateNoteAction[];
+  createContractNotes?: CreateContractNoteAction[];
   withdraws?: WithdrawAction[];
   surpluses?: SurplusAction[];
   invoke?: InvokeAction;
@@ -619,11 +619,11 @@ export interface TokenOperationsBuilder {
   inputs(...notes: Note[]): this;
 
   /**
-   * Consume predicate notes as private inputs. The same transaction must call `.invoke()` (or
-   * `.computeAndInvoke()`) with the predicate contract as its target; authorization failure
+   * Consume contract notes as private inputs. The same transaction must call `.invoke()` (or
+   * `.computeAndInvoke()`) with the controller contract as its target; authorization failure
    * reverts the complete transaction.
    */
-  usePredicateNote(...notes: PredicateNoteSpend[]): this;
+  useContractNote(...notes: ContractNoteSpend[]): this;
 
   /**
    * Deposit this token.
@@ -641,11 +641,11 @@ export interface TokenOperationsBuilder {
   transfer(...outputs: TransferOutput[]): this;
 
   /**
-   * Create notes controlled by a predicate contract. `nonce` and `blinding` are private openings:
+   * Create notes controlled by a controller contract. `nonce` and `blinding` are private openings:
    * generate them cryptographically, never publish them, and retain them until spend. The same
-   * transaction must invoke the predicate contract to authorize creation.
+   * transaction must invoke the controller contract to authorize creation.
    */
-  createPredicateNote(...outputs: PredicateNoteCreation[]): this;
+  createContractNote(...outputs: ContractNoteCreation[]): this;
 
   /**
    * Set the recipient for any surplus for this token.

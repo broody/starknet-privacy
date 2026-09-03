@@ -107,37 +107,37 @@ pub struct NoteUsed {
 }
 
 #[derive(Serde, Copy, Debug, Drop, PartialEq, starknet::Event)]
-pub struct PredicateNoteCreated {
+pub struct ContractNoteCreated {
     /// The note ID.
     #[key]
     pub note_id: felt252,
-    /// The predicate contract address.
+    /// The controller contract address.
     #[key]
-    pub predicate_address: ContractAddress,
-    /// The application-specific predicate commitment.
+    pub controller_contract: ContractAddress,
+    /// The application-specific controller commitment.
     #[key]
-    pub predicate_commitment: felt252,
-    /// The predicate implementation bound for the lifetime of the note.
-    pub predicate_class_hash: ClassHash,
-    /// The note's token. Predicate-note token types are intentionally public to the predicate.
+    pub controller_commitment: felt252,
+    /// The controller implementation bound for the lifetime of the note.
+    pub controller_class_hash: ClassHash,
+    /// The note's token. Contract-note token types are intentionally public to the controller.
     pub token: ContractAddress,
     /// Hiding commitment to the private amount and blinding.
     pub note_commitment: felt252,
 }
 
 #[derive(Serde, Copy, Debug, Drop, PartialEq, starknet::Event)]
-pub struct PredicateNoteUsed {
-    /// Secret-derived nullifier of the used predicate note. This does not reveal its note ID.
+pub struct ContractNoteUsed {
+    /// Secret-derived nullifier of the used contract note. This does not reveal its note ID.
     #[key]
     pub nullifier: felt252,
-    /// The predicate contract address that authorized the spend.
+    /// The controller contract address that authorized the spend.
     #[key]
-    pub predicate_address: ContractAddress,
+    pub controller_contract: ContractAddress,
     /// Application-specific policy commitment bound at creation.
     #[key]
-    pub predicate_commitment: felt252,
+    pub controller_commitment: felt252,
     /// The implementation class bound at creation.
-    pub predicate_class_hash: ClassHash,
+    pub controller_class_hash: ClassHash,
     /// Token released into the private transaction's conservation balance.
     pub token: ContractAddress,
 }

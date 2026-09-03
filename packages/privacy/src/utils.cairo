@@ -10,7 +10,7 @@ use openzeppelin::interfaces::introspection::{ISRC5SafeDispatcher, ISRC5SafeDisp
 use privacy::actions::{ClientAction, ServerAction, WriteOnceInput};
 use privacy::errors;
 use privacy::errors::internal_errors;
-use privacy::hashes::domain_separation::PREDICATE_ACTIONS_TAG;
+use privacy::hashes::domain_separation::CONTRACT_NOTE_ACTIONS_TAG;
 use privacy::hashes::{
     compute_enc_amount_hash, compute_enc_channel_key_hash, compute_enc_private_key_hash,
     compute_enc_recipient_addr_hash, compute_enc_sender_addr_hash, compute_enc_token_hash,
@@ -91,12 +91,13 @@ pub mod constants {
     pub const INVOKE_WITH_COMPUTATION_SELECTOR: felt252 = selector!(
         "privacy_invoke_with_computation",
     );
-    /// Predicate-authorizing counterpart to `privacy_invoke`. The pool prepends a canonical
-    /// [`PredicateContext`](privacy::objects::PredicateContext) to the original invoke calldata.
-    pub const PREDICATE_INVOKE_SELECTOR: felt252 = selector!("privacy_predicate_invoke");
-    /// Predicate-authorizing counterpart to `privacy_invoke_with_computation`.
-    pub const PREDICATE_INVOKE_WITH_COMPUTATION_SELECTOR: felt252 = selector!(
-        "privacy_predicate_invoke_with_computation",
+    /// Contract-note-authorizing counterpart to `privacy_invoke`. The pool prepends a canonical
+    /// [`ContractNoteContext`](privacy::objects::ContractNoteContext) to the original invoke
+    /// calldata.
+    pub const CONTRACT_NOTE_INVOKE_SELECTOR: felt252 = selector!("privacy_contract_note_invoke");
+    /// Contract-note-authorizing counterpart to `privacy_invoke_with_computation`.
+    pub const CONTRACT_NOTE_INVOKE_WITH_COMPUTATION_SELECTOR: felt252 = selector!(
+        "privacy_contract_note_invoke_with_computation",
     );
     /// STRK fee token address — same on all Starknet networks (mainnet, sepolia, devnet).
     pub const STRK_TOKEN_ADDRESS: ContractAddress =
@@ -576,10 +577,10 @@ pub(crate) fn compute_message_hash(
 }
 
 /// Commits to the exact proven server-action list under the current chain and pool.
-pub(crate) fn compute_predicate_actions_hash(
+pub(crate) fn compute_contract_note_actions_hash(
     actions: Span<ServerAction>, chain_id: felt252, pool_address: ContractAddress,
 ) -> felt252 {
-    let mut data = array![PREDICATE_ACTIONS_TAG, chain_id, pool_address.into()];
+    let mut data = array![CONTRACT_NOTE_ACTIONS_TAG, chain_id, pool_address.into()];
     actions.serialize(ref data);
     poseidon_hash_span(data.span())
 }

@@ -1,7 +1,7 @@
 use privacy::hashes::{
-    compute_channel_key, compute_channel_marker, compute_identity_key, compute_note_id,
-    compute_nullifier, compute_outgoing_channel_id, compute_predicate_note_commitment,
-    compute_predicate_note_id, compute_predicate_nullifier, compute_subchannel_id,
+    compute_channel_key, compute_channel_marker, compute_contract_note_commitment,
+    compute_contract_note_id, compute_contract_note_nullifier, compute_identity_key,
+    compute_note_id, compute_nullifier, compute_outgoing_channel_id, compute_subchannel_id,
     compute_subchannel_marker, hash,
 };
 use starkware_utils::constants::MAX_U32;
@@ -256,22 +256,22 @@ fn test_compute_nullifier_different_inputs() {
 }
 
 #[test]
-fn test_compute_predicate_note_id_different_inputs() {
+fn test_compute_contract_note_id_different_inputs() {
     let chain_id = 'CHAIN_ID';
     let pool_address = hash(['POOL_ADDRESS'].span()).try_into().unwrap();
     let sender_addr = hash(['SENDER_ADDR'].span()).try_into().unwrap();
-    let predicate_address = hash(['PREDICATE_ADDR'].span()).try_into().unwrap();
-    let predicate_class_hash = hash(['PREDICATE_CLASS'].span()).try_into().unwrap();
-    let predicate_commitment = hash(['PREDICATE_COMMITMENT'].span());
+    let controller_contract = hash(['CONTROLLER_CONTRACT'].span()).try_into().unwrap();
+    let controller_class_hash = hash(['CONTROLLER_CLASS'].span()).try_into().unwrap();
+    let controller_commitment = hash(['CONTROLLER_COMMITMENT'].span());
     let token = hash(['TOKEN'].span()).try_into().unwrap();
     let nonce = hash(['NONCE'].span());
-    let note_id = compute_predicate_note_id(
+    let note_id = compute_contract_note_id(
         :chain_id,
         :pool_address,
         :sender_addr,
-        :predicate_address,
-        :predicate_class_hash,
-        :predicate_commitment,
+        :controller_contract,
+        :controller_class_hash,
+        :controller_commitment,
         :token,
         :nonce,
     );
@@ -279,39 +279,39 @@ fn test_compute_predicate_note_id_different_inputs() {
     let other_nonce = hash(['OTHER_NONCE'].span());
     assert_ne!(
         note_id,
-        compute_predicate_note_id(
+        compute_contract_note_id(
             :chain_id,
             :pool_address,
             sender_addr: other_sender_addr,
-            :predicate_address,
-            :predicate_class_hash,
-            :predicate_commitment,
+            :controller_contract,
+            :controller_class_hash,
+            :controller_commitment,
             :token,
             :nonce,
         ),
     );
     assert_ne!(
         note_id,
-        compute_predicate_note_id(
+        compute_contract_note_id(
             :chain_id,
             :pool_address,
             :sender_addr,
-            :predicate_address,
-            :predicate_class_hash,
-            :predicate_commitment,
+            :controller_contract,
+            :controller_class_hash,
+            :controller_commitment,
             :token,
             nonce: other_nonce,
         ),
     );
     assert_ne!(
         note_id,
-        compute_predicate_note_id(
+        compute_contract_note_id(
             chain_id: 'OTHER_CHAIN',
             :pool_address,
             :sender_addr,
-            :predicate_address,
-            :predicate_class_hash,
-            :predicate_commitment,
+            :controller_contract,
+            :controller_class_hash,
+            :controller_commitment,
             :token,
             :nonce,
         ),
@@ -319,36 +319,36 @@ fn test_compute_predicate_note_id_different_inputs() {
 }
 
 #[test]
-fn test_compute_predicate_note_commitment_hides_amount_and_blinding() {
+fn test_compute_contract_note_commitment_hides_amount_and_blinding() {
     let chain_id = 'CHAIN_ID';
     let pool_address = hash(['POOL_ADDRESS'].span()).try_into().unwrap();
     let note_id = hash(['NOTE_ID'].span());
-    let predicate_address = hash(['PREDICATE_ADDR'].span()).try_into().unwrap();
-    let predicate_class_hash = hash(['PREDICATE_CLASS'].span()).try_into().unwrap();
-    let predicate_commitment = hash(['PREDICATE_COMMITMENT'].span());
+    let controller_contract = hash(['CONTROLLER_CONTRACT'].span()).try_into().unwrap();
+    let controller_class_hash = hash(['CONTROLLER_CLASS'].span()).try_into().unwrap();
+    let controller_commitment = hash(['CONTROLLER_COMMITMENT'].span());
     let token = hash(['TOKEN'].span()).try_into().unwrap();
     let amount: u128 = 42;
     let blinding = hash(['BLINDING'].span());
-    let commitment = compute_predicate_note_commitment(
+    let commitment = compute_contract_note_commitment(
         :chain_id,
         :pool_address,
         :note_id,
-        :predicate_address,
-        :predicate_class_hash,
-        :predicate_commitment,
+        :controller_contract,
+        :controller_class_hash,
+        :controller_commitment,
         :token,
         :amount,
         :blinding,
     );
     assert_ne!(
         commitment,
-        compute_predicate_note_commitment(
+        compute_contract_note_commitment(
             :chain_id,
             :pool_address,
             :note_id,
-            :predicate_address,
-            :predicate_class_hash,
-            :predicate_commitment,
+            :controller_contract,
+            :controller_class_hash,
+            :controller_commitment,
             :token,
             amount: amount + 1,
             :blinding,
@@ -356,13 +356,13 @@ fn test_compute_predicate_note_commitment_hides_amount_and_blinding() {
     );
     assert_ne!(
         commitment,
-        compute_predicate_note_commitment(
+        compute_contract_note_commitment(
             :chain_id,
             :pool_address,
             :note_id,
-            :predicate_address,
-            :predicate_class_hash,
-            :predicate_commitment,
+            :controller_contract,
+            :controller_class_hash,
+            :controller_commitment,
             :token,
             :amount,
             blinding: hash(['OTHER_BLINDING'].span()),
@@ -371,19 +371,21 @@ fn test_compute_predicate_note_commitment_hides_amount_and_blinding() {
 }
 
 #[test]
-fn test_compute_predicate_nullifier_is_pool_and_chain_bound() {
+fn test_compute_contract_note_nullifier_is_pool_and_chain_bound() {
     let chain_id = 'CHAIN_ID';
     let pool_address = hash(['POOL_ADDRESS'].span()).try_into().unwrap();
     let note_id = hash(['NOTE_ID'].span());
     let blinding = hash(['BLINDING'].span());
-    let nullifier = compute_predicate_nullifier(:chain_id, :pool_address, :note_id, :blinding);
+    let nullifier = compute_contract_note_nullifier(:chain_id, :pool_address, :note_id, :blinding);
     assert_ne!(
         nullifier,
-        compute_predicate_nullifier(chain_id: 'OTHER_CHAIN', :pool_address, :note_id, :blinding),
+        compute_contract_note_nullifier(
+            chain_id: 'OTHER_CHAIN', :pool_address, :note_id, :blinding,
+        ),
     );
     assert_ne!(
         nullifier,
-        compute_predicate_nullifier(
+        compute_contract_note_nullifier(
             :chain_id,
             pool_address: hash(['OTHER_POOL'].span()).try_into().unwrap(),
             :note_id,
@@ -392,13 +394,13 @@ fn test_compute_predicate_nullifier_is_pool_and_chain_bound() {
     );
     assert_ne!(
         nullifier,
-        compute_predicate_nullifier(
+        compute_contract_note_nullifier(
             :chain_id, :pool_address, note_id: hash(['OTHER_NOTE'].span()), :blinding,
         ),
     );
     assert_ne!(
         nullifier,
-        compute_predicate_nullifier(
+        compute_contract_note_nullifier(
             :chain_id, :pool_address, :note_id, blinding: hash(['OTHER_BLINDING'].span()),
         ),
     );

@@ -67,8 +67,8 @@ export class PoolSimulator {
         this.handleUseNote(action.input);
         break;
 
-      case "UsePredicateNote":
-        // Predicate-note state is intentionally outside the private channel registry.
+      case "UseContractNote":
+        // Contract-note state is intentionally outside the private channel registry.
         break;
 
       case "CreateEncNote":
@@ -79,8 +79,8 @@ export class PoolSimulator {
         this.handleCreateOpenNote(action.input);
         break;
 
-      case "CreatePredicateNote":
-        // Predicate-note state is intentionally outside the private channel registry.
+      case "CreateContractNote":
+        // Contract-note state is intentionally outside the private channel registry.
         break;
 
       case "Withdraw":

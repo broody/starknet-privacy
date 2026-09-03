@@ -2,10 +2,10 @@ use core::num::traits::Zero;
 use core::poseidon::poseidon_hash_span;
 use openzeppelin::security::ReentrancyGuardComponent::Errors as ReentrancyGuardErrors;
 use privacy::actions::{
-    AppendInput, ClientAction, ComputeAndInvokeInput, CreateEncNoteInput, CreateOpenNoteInput,
-    CreatePredicateNoteInput, DepositInput, InvokeExternalInput, InvokeInput, OpenChannelInput,
+    AppendInput, ClientAction, ComputeAndInvokeInput, CreateContractNoteInput, CreateEncNoteInput,
+    CreateOpenNoteInput, DepositInput, InvokeExternalInput, InvokeInput, OpenChannelInput,
     OpenSubchannelInput, ServerAction, SetViewingKeyInput, TransferFromInput, TransferToInput,
-    UseNoteInput, UsePredicateNoteInput, WithdrawInput,
+    UseContractNoteInput, UseNoteInput, WithdrawInput,
 };
 use privacy::hashes::{
     compute_identity_key, compute_note_id, compute_nullifier, compute_subchannel_id,
@@ -93,10 +93,10 @@ fn test_action_enum_discriminants_are_append_only() {
     );
     assert_eq!(
         client_action_variant(
-            ClientAction::CreatePredicateNote(
-                CreatePredicateNoteInput {
-                    predicate_address: 1.try_into().unwrap(),
-                    predicate_commitment: 1,
+            ClientAction::CreateContractNote(
+                CreateContractNoteInput {
+                    controller_contract: 1.try_into().unwrap(),
+                    controller_commitment: 1,
                     token: 1.try_into().unwrap(),
                     amount: 1,
                     nonce: 1,
@@ -108,8 +108,8 @@ fn test_action_enum_discriminants_are_append_only() {
     );
     assert_eq!(
         client_action_variant(
-            ClientAction::UsePredicateNote(
-                UsePredicateNoteInput { note_id: 1, amount: 1, blinding: 1 },
+            ClientAction::UseContractNote(
+                UseContractNoteInput { note_id: 1, amount: 1, blinding: 1 },
             ),
         ),
         11,

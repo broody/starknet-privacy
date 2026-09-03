@@ -1,7 +1,7 @@
 use privacy::actions::{ClientAction, ServerAction};
 use privacy::objects::{
-    EncChannelInfo, EncOutgoingChannelInfo, EncPrivateKey, EncSubchannelInfo, Note,
-    OpenNoteScreeningPolicy, PredicateNote,
+    ContractNote, EncChannelInfo, EncOutgoingChannelInfo, EncPrivateKey, EncSubchannelInfo, Note,
+    OpenNoteScreeningPolicy,
 };
 use privacy::snip12::ScreeningAttestation;
 use starknet::ContractAddress;
@@ -684,8 +684,8 @@ pub trait IViews<T> {
     /// ([`Note`](privacy::objects::Note)): The note, or a zero struct if the note does not exist.
     fn get_note(self: @T, note_id: felt252) -> Note;
 
-    /// Returns the commitment and predicate metadata for a predicate-escrowed note.
-    fn get_predicate_note(self: @T, note_id: felt252) -> PredicateNote;
+    /// Returns the commitment and controller metadata for a contract-controlled note.
+    fn get_contract_note(self: @T, note_id: felt252) -> ContractNote;
 
     /// Checks if a nullifier exists.
     ///
@@ -696,8 +696,8 @@ pub trait IViews<T> {
     /// (`bool`): True if the nullifier exists in the contract, false otherwise.
     fn nullifier_exists(self: @T, nullifier: felt252) -> bool;
 
-    /// Returns whether a predicate-note nullifier has already been applied.
-    fn predicate_nullifier_exists(self: @T, nullifier: felt252) -> bool;
+    /// Returns whether a contract-note nullifier has already been applied.
+    fn contract_note_nullifier_exists(self: @T, nullifier: felt252) -> bool;
 
     /// Returns the registered public viewing key of the given user address.
     ///

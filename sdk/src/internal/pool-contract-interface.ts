@@ -35,11 +35,11 @@ export type EncPrivateKey = {
   enc_private_key: BigNumberish;
 };
 
-export type PredicateNote = {
+export type ContractNote = {
   note_commitment: BigNumberish;
-  predicate_address: BigNumberish;
-  predicate_class_hash: BigNumberish;
-  predicate_commitment: BigNumberish;
+  controller_contract: BigNumberish;
+  controller_class_hash: BigNumberish;
+  controller_commitment: BigNumberish;
   token: BigNumberish;
 };
 
@@ -61,9 +61,9 @@ export interface PoolContractInterface {
   get_subchannel_info(subchannelId: BigNumberish): EncSubchannelInfo | Promise<EncSubchannelInfo>;
   get_outgoing_channel_info(outgoingChannelId: BigNumberish): EncOutgoingChannelInfo | Promise<EncOutgoingChannelInfo>;
   get_note(noteId: BigNumberish): NoteData | Promise<NoteData>;
-  get_predicate_note(noteId: BigNumberish): PredicateNote | Promise<PredicateNote>;
+  get_contract_note(noteId: BigNumberish): ContractNote | Promise<ContractNote>;
   nullifier_exists(nullifier: BigNumberish): boolean | Promise<boolean>;
-  predicate_nullifier_exists(nullifier: BigNumberish): boolean | Promise<boolean>;
+  contract_note_nullifier_exists(nullifier: BigNumberish): boolean | Promise<boolean>;
   get_public_key(userAddr: BigNumberish): BigNumberish | Promise<BigNumberish>;
   get_enc_private_key(userAddr: BigNumberish): EncPrivateKey | Promise<EncPrivateKey>;
   get_auditor_public_key(): BigNumberish | Promise<BigNumberish>;

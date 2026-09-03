@@ -31,8 +31,8 @@ use privacy::interface::{
     IViewsDispatcher, IViewsDispatcherTrait, IViewsSafeDispatcher, IViewsSafeDispatcherTrait,
 };
 use privacy::objects::{
-    EncChannelInfo, EncOutgoingChannelInfo, EncPrivateKey, EncSubchannelInfo, EncUserAddr, Note,
-    OpenNoteDeposit, OpenNoteScreeningPolicy, PredicateNote, TokenBalances, TokenBalancesTrait,
+    ContractNote, EncChannelInfo, EncOutgoingChannelInfo, EncPrivateKey, EncSubchannelInfo,
+    EncUserAddr, Note, OpenNoteDeposit, OpenNoteScreeningPolicy, TokenBalances, TokenBalancesTrait,
 };
 use privacy::privacy::Privacy;
 use privacy::privacy::Privacy::{ClientInternalTrait, deploy_for_test as deploy_privacy_for_test};
@@ -55,7 +55,7 @@ use privacy::tests::mock_invoke_returns::MockComputeMultiFelt::deploy_for_test a
 use privacy::tests::mock_invoke_returns::MockEcho::deploy_for_test as deploy_mock_echo_for_test;
 use privacy::tests::mock_invoke_returns::MockReturnGarbage::deploy_for_test as deploy_mock_return_garbage_for_test;
 use privacy::tests::mock_invoke_returns::MockReturnTrailingGarbage::deploy_for_test as deploy_mock_return_trailing_garbage_for_test;
-use privacy::tests::mock_predicate::MockPredicate::deploy_for_test as deploy_mock_predicate_for_test;
+use privacy::tests::mock_note_controller::MockNoteController::deploy_for_test as deploy_mock_note_controller_for_test;
 use privacy::tests::mock_reentrancy::MockReentrancy::deploy_for_test as deploy_mock_reentrancy_for_test;
 use privacy::tests::mock_stark_account::MockStarkAccount::deploy_for_test as deploy_mock_stark_account_for_test;
 use privacy::tests::utils_for_tests::constants::DEFAULT_PROOF_VALIDITY_BLOCKS;
@@ -2132,12 +2132,12 @@ pub(crate) impl PrivacyCfgImpl of PrivacyCfgTrait {
         self.views.get_proof_validity_blocks()
     }
 
-    fn get_predicate_note(self: @PrivacyCfg, note_id: felt252) -> PredicateNote {
-        self.views.get_predicate_note(:note_id)
+    fn get_contract_note(self: @PrivacyCfg, note_id: felt252) -> ContractNote {
+        self.views.get_contract_note(:note_id)
     }
 
-    fn predicate_nullifier_exists(self: @PrivacyCfg, nullifier: felt252) -> bool {
-        self.views.predicate_nullifier_exists(:nullifier)
+    fn contract_note_nullifier_exists(self: @PrivacyCfg, nullifier: felt252) -> bool {
+        self.views.contract_note_nullifier_exists(:nullifier)
     }
 
     fn wrap_inputs_into_calls(
@@ -2615,19 +2615,19 @@ pub(crate) fn deploy_mock_compute(
     contract_address
 }
 
-/// Deploys a predicate callback target bound to `pool_address`.
-pub(crate) fn deploy_mock_predicate(
+/// Deploys a contract-note callback target bound to `pool_address`.
+pub(crate) fn deploy_mock_note_controller(
     pool_address: ContractAddress, allowed: bool, salt: felt252,
 ) -> ContractAddress {
-    let class_hash = declare(contract: "MockPredicate")
+    let class_hash = declare(contract: "MockNoteController")
         .unwrap_syscall()
         .contract_class()
         .class_hash;
     let deployment_params = DeploymentParams { salt, deploy_from_zero: true };
-    let (contract_address, _) = deploy_mock_predicate_for_test(
+    let (contract_address, _) = deploy_mock_note_controller_for_test(
         class_hash: *class_hash, :deployment_params, :pool_address, :allowed,
     )
-        .expect('MOCK_PREDICATE_DEPLOY_FAIL');
+        .expect('NOTE_CONTROLLER_DEPLOY_FAIL');
     contract_address
 }
 

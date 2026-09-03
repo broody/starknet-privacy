@@ -37,14 +37,14 @@ pub mod domain_separation {
     pub const OUTGOING_CHANNEL_ID_TAG: felt252 = 'OUTGOING_CHANNEL_ID_TAG:V1';
     /// Tag for `identity_key`.
     pub const IDENTITY_KEY_TAG: felt252 = 'IDENTITY_KEY_TAG:V1';
-    /// Tag for a predicate note ID.
-    pub const PREDICATE_NOTE_ID_TAG: felt252 = 'PREDICATE_NOTE_ID_TAG:V1';
-    /// Tag for a predicate note's hiding commitment.
-    pub const PREDICATE_NOTE_COMMIT_TAG: felt252 = 'PREDICATE_NOTE_COMMIT_TAG:V1';
-    /// Tag for `predicate_nullifier`.
-    pub const PREDICATE_NULLIFIER_TAG: felt252 = 'PREDICATE_NULLIFIER_TAG:V1';
-    /// Tag for the exact server-action list authorized by a predicate callback.
-    pub const PREDICATE_ACTIONS_TAG: felt252 = 'PREDICATE_ACTIONS_TAG:V1';
+    /// Tag for a contract note ID.
+    pub const CONTRACT_NOTE_ID_TAG: felt252 = 'CONTRACT_NOTE_ID_TAG:V1';
+    /// Tag for a contract note's hiding commitment.
+    pub const CONTRACT_NOTE_COMMIT_TAG: felt252 = 'CONTRACT_NOTE_COMMIT_TAG:V1';
+    /// Tag for `contract_note_nullifier`.
+    pub const CONTRACT_NOTE_NULLIFIER_TAG: felt252 = 'CONTRACT_NOTE_NULLIFIER_TAG:V1';
+    /// Tag for the exact server-action list authorized by a contract-note callback.
+    pub const CONTRACT_NOTE_ACTIONS_TAG: felt252 = 'CONTRACT_NOTE_ACTIONS_TAG:V1';
 }
 
 
@@ -243,52 +243,52 @@ pub(crate) fn compute_nullifier(
     )
 }
 
-/// Computes an unlinkable predicate-note ID from a private random nonce.
-pub(crate) fn compute_predicate_note_id(
+/// Computes an unlinkable contract-note ID from a private random nonce.
+pub(crate) fn compute_contract_note_id(
     chain_id: felt252,
     pool_address: ContractAddress,
     sender_addr: ContractAddress,
-    predicate_address: ContractAddress,
-    predicate_class_hash: ClassHash,
-    predicate_commitment: felt252,
+    controller_contract: ContractAddress,
+    controller_class_hash: ClassHash,
+    controller_commitment: felt252,
     token: ContractAddress,
     nonce: felt252,
 ) -> felt252 {
     hash(
         [
-            PREDICATE_NOTE_ID_TAG, chain_id, pool_address.into(), sender_addr.into(),
-            predicate_address.into(), predicate_class_hash.into(), predicate_commitment,
+            CONTRACT_NOTE_ID_TAG, chain_id, pool_address.into(), sender_addr.into(),
+            controller_contract.into(), controller_class_hash.into(), controller_commitment,
             token.into(), nonce,
         ]
             .span(),
     )
 }
 
-/// Computes the hiding amount commitment stored for a predicate note.
-pub(crate) fn compute_predicate_note_commitment(
+/// Computes the hiding amount commitment stored for a contract note.
+pub(crate) fn compute_contract_note_commitment(
     chain_id: felt252,
     pool_address: ContractAddress,
     note_id: felt252,
-    predicate_address: ContractAddress,
-    predicate_class_hash: ClassHash,
-    predicate_commitment: felt252,
+    controller_contract: ContractAddress,
+    controller_class_hash: ClassHash,
+    controller_commitment: felt252,
     token: ContractAddress,
     amount: u128,
     blinding: felt252,
 ) -> felt252 {
     hash(
         [
-            PREDICATE_NOTE_COMMIT_TAG, chain_id, pool_address.into(), note_id,
-            predicate_address.into(), predicate_class_hash.into(), predicate_commitment,
+            CONTRACT_NOTE_COMMIT_TAG, chain_id, pool_address.into(), note_id,
+            controller_contract.into(), controller_class_hash.into(), controller_commitment,
             token.into(), amount.into(), blinding,
         ]
             .span(),
     )
 }
 
-/// Computes a pool- and chain-bound nullifier from a predicate note's secret blinding.
-pub(crate) fn compute_predicate_nullifier(
+/// Computes a pool- and chain-bound nullifier from a contract note's secret blinding.
+pub(crate) fn compute_contract_note_nullifier(
     chain_id: felt252, pool_address: ContractAddress, note_id: felt252, blinding: felt252,
 ) -> felt252 {
-    hash([PREDICATE_NULLIFIER_TAG, chain_id, pool_address.into(), note_id, blinding].span())
+    hash([CONTRACT_NOTE_NULLIFIER_TAG, chain_id, pool_address.into(), note_id, blinding].span())
 }
