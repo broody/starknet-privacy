@@ -149,29 +149,26 @@ pub(crate) impl CreateOpenNoteInputValid of InputValidation<CreateOpenNoteInput>
 pub struct CreateContractNoteInput {
     /// The address of the contract controlling spend authority.
     pub contract_address: ContractAddress,
-    /// The application-specific controller commitment.
-    pub controller_commitment: felt252,
+    /// The application-specific policy commitment.
+    pub policy_commitment: felt252,
     /// The token's address.
     pub token: ContractAddress,
     /// The amount the note represents.
     pub amount: u128,
-    /// Private random nonce used to derive an unlinkable note ID.
-    pub nonce: felt252,
-    /// Private random blinding used in the amount commitment.
-    pub blinding: felt252,
+    /// Private random value used to derive the note ID, amount blinding, and nullifier.
+    pub secret: felt252,
 }
 
 pub(crate) impl CreateContractNoteInputValid of InputValidation<CreateContractNoteInput> {
     fn assert_valid(self: CreateContractNoteInput) {
         let CreateContractNoteInput {
-            contract_address, controller_commitment, token, amount, nonce, blinding,
+            contract_address, policy_commitment, token, amount, secret,
         } = self;
         assert(contract_address.is_non_zero(), errors::ZERO_CONTRACT_ADDRESS);
-        assert(controller_commitment.is_non_zero(), errors::ZERO_CONTROLLER_COMMITMENT);
+        assert(policy_commitment.is_non_zero(), errors::ZERO_POLICY_COMMITMENT);
         assert(token.is_non_zero(), errors::ZERO_TOKEN);
         assert(amount.is_non_zero(), errors::ZERO_AMOUNT);
-        assert(nonce.is_non_zero(), errors::ZERO_CONTRACT_NOTE_NONCE);
-        assert(blinding.is_non_zero(), errors::ZERO_CONTRACT_NOTE_BLINDING);
+        assert(secret.is_non_zero(), errors::ZERO_CONTRACT_NOTE_SECRET);
     }
 }
 
@@ -217,16 +214,16 @@ pub struct UseContractNoteInput {
     pub note_id: felt252,
     /// Private amount opening.
     pub amount: u128,
-    /// Private commitment blinding retained by an authorized prover.
-    pub blinding: felt252,
+    /// Private note secret retained by an authorized prover.
+    pub secret: felt252,
 }
 
 pub(crate) impl UseContractNoteInputValid of InputValidation<UseContractNoteInput> {
     fn assert_valid(self: UseContractNoteInput) {
-        let UseContractNoteInput { note_id, amount, blinding } = self;
+        let UseContractNoteInput { note_id, amount, secret } = self;
         assert(note_id.is_non_zero(), errors::ZERO_NOTE_ID);
         assert(amount.is_non_zero(), errors::ZERO_AMOUNT);
-        assert(blinding.is_non_zero(), errors::ZERO_CONTRACT_NOTE_BLINDING);
+        assert(secret.is_non_zero(), errors::ZERO_CONTRACT_NOTE_SECRET);
     }
 }
 
@@ -322,7 +319,7 @@ pub enum ClientAction {
     /// Runs `privacy_compute` on the client and forwards its result as a server-side
     /// `InvokeWithComputation` action.
     ComputeAndInvoke: ComputeAndInvokeInput,
-    /// Creates a confidential note locked to an atomically invoked controller contract.
+    /// Creates a confidential note locked to an atomically invoked application contract.
     CreateContractNote: CreateContractNoteInput,
     /// Opens and consumes a contract note, subject to that contract's atomic authorization.
     UseContractNote: UseContractNoteInput,

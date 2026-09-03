@@ -17,8 +17,8 @@ use privacy::hashes::{
     compute_enc_user_addr_hash,
 };
 use privacy::objects::{
-    EncChannelInfo, EncOutgoingChannelInfo, EncPrivateKey, EncSubchannelInfo, EncUserAddr, Note,
-    OpenNoteDeposit,
+    ContractNoteContext, EncChannelInfo, EncOutgoingChannelInfo, EncPrivateKey, EncSubchannelInfo,
+    EncUserAddr, Note, OpenNoteDeposit,
 };
 use privacy::snip12::compute_call_set_hash;
 use privacy::utils::constants::{
@@ -28,7 +28,10 @@ use privacy::utils::constants::{
 use starknet::account::Call;
 use starknet::storage::{StorageAsPointer, StoragePath};
 use starknet::syscalls::{get_class_hash_at_syscall, send_message_to_l1_syscall};
-use starknet::{ContractAddress, Store, SyscallResultTrait, TxInfo, VALIDATED};
+use starknet::{
+    ContractAddress, Store, SyscallResultTrait, TxInfo, VALIDATED, get_caller_address,
+    get_execution_info,
+};
 
 #[starknet::interface]
 pub(crate) trait IAccount<TState> {
@@ -583,6 +586,27 @@ pub(crate) fn compute_contract_note_actions_hash(
     let mut data = array![CONTRACT_NOTE_ACTIONS_TAG, chain_id, pool_address.into()];
     actions.serialize(ref data);
     poseidon_hash_span(data.span())
+}
+
+/// Deserializes and authenticates the server-action list in a contract-note callback.
+///
+/// The application contract must separately assert that `get_caller_address()` is its expected
+/// privacy pool. This helper binds the canonical action list to that caller and the current chain.
+pub fn validate_contract_note_context(context: ContractNoteContext) -> Span<ServerAction> {
+    let ContractNoteContext { actions_hash, serialized_actions } = context;
+    let mut serialized_actions = serialized_actions;
+    let actions: Span<ServerAction> = Serde::deserialize(ref serialized_actions)
+        .expect(errors::INVALID_CONTRACT_NOTE_CONTEXT);
+    assert(serialized_actions.is_empty(), errors::INVALID_CONTRACT_NOTE_CONTEXT);
+    assert(
+        actions_hash == compute_contract_note_actions_hash(
+            :actions,
+            chain_id: get_execution_info().tx_info.chain_id,
+            pool_address: get_caller_address(),
+        ),
+        errors::INVALID_CONTRACT_NOTE_CONTEXT,
+    );
+    actions
 }
 
 /// Asserts that the call originates from the OS.

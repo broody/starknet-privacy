@@ -74,17 +74,16 @@ export type ComputeAndInvokeInput = {
 
 export type CreateContractNoteInput = {
   contract_address: StarknetAddressBigint;
-  controller_commitment: bigint;
+  policy_commitment: bigint;
   token: StarknetAddressBigint;
   amount: bigint;
-  nonce: bigint;
-  blinding: bigint;
+  secret: bigint;
 };
 
 export type UseContractNoteInput = {
   note_id: bigint;
   amount: bigint;
-  blinding: bigint;
+  secret: bigint;
 };
 
 /**

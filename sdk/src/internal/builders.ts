@@ -87,7 +87,7 @@ export class TokenOperationsBuilderImpl implements TokenOperationsBuilder {
         token: this.token,
         noteId: note.noteId,
         amount: note.amount,
-        blinding: note.blinding,
+        secret: note.secret,
       });
     }
     return this;
@@ -144,10 +144,9 @@ export class TokenOperationsBuilderImpl implements TokenOperationsBuilder {
       this.createContractNotes.push({
         token: this.token,
         contractAddress: output.contractAddress,
-        controllerCommitment: output.controllerCommitment,
+        policyCommitment: output.policyCommitment,
         amount: output.amount,
-        nonce: output.nonce,
-        blinding: output.blinding,
+        secret: output.secret,
       });
     }
     return this;

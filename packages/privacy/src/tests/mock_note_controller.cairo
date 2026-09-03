@@ -20,9 +20,9 @@ pub mod MockNoteController {
     use core::num::traits::Zero;
     use privacy::actions::ServerAction;
     use privacy::objects::{ContractNoteContext, OpenNoteDeposit};
-    use privacy::utils::compute_contract_note_actions_hash;
+    use privacy::utils::validate_contract_note_context;
     use starknet::storage::{StoragePointerReadAccess, StoragePointerWriteAccess};
-    use starknet::{ContractAddress, get_caller_address, get_execution_info};
+    use starknet::{ContractAddress, get_caller_address};
     use super::IMockNoteController;
 
     pub const CALLBACK_MARKER: felt252 = 'CONTRACT_NOTE_CALLBACK';
@@ -75,9 +75,8 @@ pub mod MockNoteController {
         fn privacy_contract_note_invoke(
             ref self: ContractState, context: ContractNoteContext, marker: felt252,
         ) -> Span<OpenNoteDeposit> {
-            assert(get_caller_address() == self.pool_address.read(), 'CALLER_NOT_POOL');
-            assert(context.pool_address == self.pool_address.read(), 'WRONG_POOL');
-            assert(context.chain_id == get_execution_info().tx_info.chain_id, 'WRONG_CHAIN');
+            let pool_address = get_caller_address();
+            assert(pool_address == self.pool_address.read(), 'CALLER_NOT_POOL');
             assert(marker == CALLBACK_MARKER, 'WRONG_MARKER');
             assert(self.allowed.read(), CONTROLLER_DENIED);
 
@@ -85,39 +84,30 @@ pub mod MockNoteController {
             if expected_actions_hash.is_non_zero() {
                 assert(context.actions_hash == expected_actions_hash, WRONG_ACTIONS_HASH);
             }
-            let mut serialized_actions = context.serialized_actions;
-            let actions: Span<ServerAction> = Serde::deserialize(ref serialized_actions)
-                .expect('INVALID_ACTIONS');
-            assert(serialized_actions.is_empty(), 'TRAILING_ACTION_DATA');
-            assert(
-                context
-                    .actions_hash == compute_contract_note_actions_hash(
-                        :actions, chain_id: context.chain_id, pool_address: context.pool_address,
-                    ),
-                WRONG_ACTIONS_HASH,
-            );
+            let actions = validate_contract_note_context(context);
 
-            assert(context.created_notes.len() <= 1, 'TOO_MANY_CREATED');
-            assert(context.spent_notes.len() <= 1, 'TOO_MANY_SPENT');
+            let mut created_count: usize = 0;
+            let mut spent_count: usize = 0;
+            let mut created_note_id: felt252 = Zero::zero();
+            let mut spent_nullifier: felt252 = Zero::zero();
+            for action in actions {
+                match *action {
+                    ServerAction::CreateContractNote(event) => {
+                        created_count += 1;
+                        created_note_id = event.note_id;
+                    },
+                    ServerAction::UseContractNote(event) => {
+                        spent_count += 1;
+                        spent_nullifier = event.nullifier;
+                    },
+                    _ => {},
+                }
+            }
+            assert(created_count <= 1, 'TOO_MANY_CREATED');
+            assert(spent_count <= 1, 'TOO_MANY_SPENT');
             self.last_actions_hash.write(context.actions_hash);
-            self
-                .last_created_note_id
-                .write(
-                    if context.created_notes.is_empty() {
-                        Zero::zero()
-                    } else {
-                        (*context.created_notes[0]).note_id
-                    },
-                );
-            self
-                .last_spent_nullifier
-                .write(
-                    if context.spent_notes.is_empty() {
-                        Zero::zero()
-                    } else {
-                        (*context.spent_notes[0]).nullifier
-                    },
-                );
+            self.last_created_note_id.write(created_note_id);
+            self.last_spent_nullifier.write(spent_nullifier);
             self.callback_count.write(self.callback_count.read() + 1);
             [].span()
         }

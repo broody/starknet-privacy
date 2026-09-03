@@ -43,46 +43,42 @@ Actions must be ordered by phase. Actions within the same phase can appear in an
 
 ## Contract notes
 
-Contract notes hold a private amount under an application contract's policy. Creation commits to
-`amount` with a private random `blinding`, and derives the public note ID with an independent private
-random `nonce`. A spend proves the opening privately and emits only a secret-derived nullifier; the
-pool does not generically reveal which creation was consumed. Application-level
-`controller_commitment` values may still be linkable if the application makes them unique or public.
+Contract notes hold a private amount under an application contract's policy. A single private random
+`secret` domain-separately derives the note-ID nonce and amount blinding. A spend proves the opening
+privately and emits only a secret-derived nullifier; the pool does not generically reveal which
+creation was consumed. Application-level `policy_commitment` values may still be linkable if the
+application makes them unique or public.
 
 Every transaction that creates or spends contract notes must contain exactly one invoke-phase
-action targeting their controller contract. The pool changes the selector to
+action targeting their application contract. The pool changes the selector to
 `privacy_contract_note_invoke` (or `privacy_contract_note_invoke_with_computation`) and prepends a
 `ContractNoteContext`:
 
 ```cairo
 pub struct ContractNoteContext {
-    chain_id: felt252,
-    pool_address: ContractAddress,
     actions_hash: felt252,
     serialized_actions: Span<felt252>,
-    created_notes: Span<ContractNoteCreatedRef>,
-    spent_notes: Span<ContractNoteSpentRef>,
 }
 ```
 
-The callback's successful return authorizes the complete transaction atomically. Controller
+The callback's successful return authorizes the complete transaction atomically. Application
 contracts must:
 
-- assert that the caller is the expected privacy pool;
-- validate `chain_id`, `pool_address`, and the application-specific `controller_commitment`;
-- deserialize and validate `serialized_actions` to enforce the permitted asset disposition, and
-  bind any stored/committed authorization to `actions_hash`; and
+- assert that the caller is the expected privacy pool and read the chain ID from transaction context;
+- validate the application-specific `policy_commitment` in the serialized actions;
+- call `validate_contract_note_context` to authenticate and deserialize `serialized_actions`,
+  enforce the permitted asset disposition, and bind any stored authorization to `actions_hash`; and
 - return a correctly serialized `Span<OpenNoteDeposit>` (empty when it creates no open-note
   deposits).
 
-Only one controller contract and class hash may appear in a transaction. The pool binds notes to
-the controller class hash and freezes them after a direct class replacement. This does **not**
-detect an implementation change behind a proxy: proxy-based controllers must include and enforce
+Only one application contract and class hash may appear in a transaction. The pool binds notes to
+the contract class hash and freezes them after a direct class replacement. This does **not**
+detect an implementation change behind a proxy: proxy-based contracts must include and enforce
 an immutable policy/version commitment themselves.
 
-Both `nonce` and `blinding` are secrets supplied to the prover. They must be independently generated
-with cryptographic randomness, retained by the party that will spend the note, and never placed in
-public calldata, events, logs, or application state.
+The `secret` is supplied to the prover. It must be generated with cryptographic randomness, retained
+by the party that will spend the note, and never placed in public calldata, events, logs, or
+application state.
 
 ## Cryptographic primitives
 

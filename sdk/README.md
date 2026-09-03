@@ -73,7 +73,7 @@ This section describes the recommended integration patterns. Each subsection giv
 
 Use `createContractNote` and `useContractNote` for private-value notes whose lifecycle is
 authorized by an application contract. Always add `.invoke()` (or `.computeAndInvoke()`) targeting
-that same controller; the pool routes it to the dedicated contract-note callback and reverts all
+that same contract; the pool routes it to the dedicated contract-note callback and reverts all
 note and application state if authorization fails. Applications can give these notes a more
 specific name; for example, Whisper presents its auction-bound contract notes as escrow notes.
 
@@ -84,23 +84,21 @@ await transfers
   .inputs(fundingNote)
   .createContractNote({
     contractAddress: auction,
-    controllerCommitment: settlementCommitment,
+    policyCommitment: settlementCommitment,
     amount: bidAmount,
-    nonce: privateRandomNonce,
-    blinding: privateRandomBlinding,
+    secret: privateRandomSecret,
   })
   .done()
   .invoke(() => ({ contractAddress: auction, calldata: [auctionId] }))
   .execute();
 ```
 
-The `nonce`, `blinding`, and amount opening are secret prover inputs. Generate nonce and blinding
-independently with cryptographic randomness, retain them until spend, and never log or publish them.
-The contract-note callback must verify the pool caller, deserialize and validate
-`ContractNoteContext.serialized_actions`, and bind any stored authorization to `actions_hash`; checking
-only the controller commitment does not constrain where the controlled value goes. A class-hash binding
-catches direct controller replacement, but proxy controllers must enforce their own immutable
-policy/version commitment.
+The `secret` and amount opening are secret prover inputs. Generate the secret with cryptographic
+randomness, retain it until spend, and never log or publish it.
+The contract-note callback must verify the pool caller, call `validate_contract_note_context`, and
+bind any stored authorization to `actions_hash`; checking only the policy commitment does not
+constrain where the controlled value goes. A class-hash binding catches direct contract replacement,
+but proxy contracts must enforce their own immutable policy/version commitment.
 
 ### State management: go stateless
 

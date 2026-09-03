@@ -39,6 +39,10 @@ pub mod domain_separation {
     pub const IDENTITY_KEY_TAG: felt252 = 'IDENTITY_KEY_TAG:V1';
     /// Tag for a contract note ID.
     pub const CONTRACT_NOTE_ID_TAG: felt252 = 'CONTRACT_NOTE_ID_TAG:V1';
+    /// Tag for deriving a contract note's private ID nonce from its secret.
+    pub const CONTRACT_NOTE_NONCE_TAG: felt252 = 'CONTRACT_NOTE_NONCE_TAG:V1';
+    /// Tag for deriving a contract note's private amount blinding from its secret.
+    pub const CONTRACT_NOTE_BLINDING_TAG: felt252 = 'CONTRACT_NOTE_BLINDING_TAG:V1';
     /// Tag for a contract note's hiding commitment.
     pub const CONTRACT_NOTE_COMMIT_TAG: felt252 = 'CONTRACT_NOTE_COMMIT_TAG:V1';
     /// Tag for `contract_note_nullifier`.
@@ -243,22 +247,32 @@ pub(crate) fn compute_nullifier(
     )
 }
 
-/// Computes an unlinkable contract-note ID from a private random nonce.
+/// Derives the private note-ID nonce from a contract note secret.
+pub(crate) fn derive_contract_note_nonce(secret: felt252) -> felt252 {
+    hash([CONTRACT_NOTE_NONCE_TAG, secret].span())
+}
+
+/// Derives the private amount blinding from a contract note secret.
+pub(crate) fn derive_contract_note_blinding(secret: felt252) -> felt252 {
+    hash([CONTRACT_NOTE_BLINDING_TAG, secret].span())
+}
+
+/// Computes an unlinkable contract-note ID from a private random secret.
 pub(crate) fn compute_contract_note_id(
     chain_id: felt252,
     pool_address: ContractAddress,
     sender_addr: ContractAddress,
     contract_address: ContractAddress,
-    controller_class_hash: ClassHash,
-    controller_commitment: felt252,
+    contract_class_hash: ClassHash,
+    policy_commitment: felt252,
     token: ContractAddress,
-    nonce: felt252,
+    secret: felt252,
 ) -> felt252 {
     hash(
         [
             CONTRACT_NOTE_ID_TAG, chain_id, pool_address.into(), sender_addr.into(),
-            contract_address.into(), controller_class_hash.into(), controller_commitment,
-            token.into(), nonce,
+            contract_address.into(), contract_class_hash.into(), policy_commitment, token.into(),
+            derive_contract_note_nonce(secret),
         ]
             .span(),
     )
@@ -270,25 +284,31 @@ pub(crate) fn compute_contract_note_commitment(
     pool_address: ContractAddress,
     note_id: felt252,
     contract_address: ContractAddress,
-    controller_class_hash: ClassHash,
-    controller_commitment: felt252,
+    contract_class_hash: ClassHash,
+    policy_commitment: felt252,
     token: ContractAddress,
     amount: u128,
-    blinding: felt252,
+    secret: felt252,
 ) -> felt252 {
     hash(
         [
             CONTRACT_NOTE_COMMIT_TAG, chain_id, pool_address.into(), note_id,
-            contract_address.into(), controller_class_hash.into(), controller_commitment,
-            token.into(), amount.into(), blinding,
+            contract_address.into(), contract_class_hash.into(), policy_commitment, token.into(),
+            amount.into(), derive_contract_note_blinding(secret),
         ]
             .span(),
     )
 }
 
-/// Computes a pool- and chain-bound nullifier from a contract note's secret blinding.
+/// Computes a pool- and chain-bound nullifier from a contract note's secret.
 pub(crate) fn compute_contract_note_nullifier(
-    chain_id: felt252, pool_address: ContractAddress, note_id: felt252, blinding: felt252,
+    chain_id: felt252, pool_address: ContractAddress, note_id: felt252, secret: felt252,
 ) -> felt252 {
-    hash([CONTRACT_NOTE_NULLIFIER_TAG, chain_id, pool_address.into(), note_id, blinding].span())
+    hash(
+        [
+            CONTRACT_NOTE_NULLIFIER_TAG, chain_id, pool_address.into(), note_id,
+            derive_contract_note_blinding(secret),
+        ]
+            .span(),
+    )
 }

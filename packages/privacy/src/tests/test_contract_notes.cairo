@@ -22,9 +22,8 @@ use starkware_utils_testing::test_utils::{
 };
 
 const AMOUNT: u128 = 37;
-const CONTROLLER_COMMITMENT: felt252 = 'AUCTION_SETTLEMENT';
-const NONCE: felt252 = 'PRIVATE_NOTE_NONCE';
-const BLINDING: felt252 = 'PRIVATE_BLINDING';
+const POLICY_COMMITMENT: felt252 = 'AUCTION_SETTLEMENT';
+const SECRET: felt252 = 'PRIVATE_NOTE_SECRET';
 
 fn source_note(
     ref test: Test, ref user: User,
@@ -73,11 +72,10 @@ fn create_contract_note(
                 ClientAction::CreateContractNote(
                     CreateContractNoteInput {
                         contract_address: controller,
-                        controller_commitment: CONTROLLER_COMMITMENT,
+                        policy_commitment: POLICY_COMMITMENT,
                         token,
                         amount: AMOUNT,
-                        nonce: NONCE,
-                        blinding: BLINDING,
+                        secret: SECRET,
                     },
                 ),
                 ClientAction::InvokeExternal(invoke),
@@ -102,7 +100,7 @@ fn spend_actions(
         .execute(
             [
                 ClientAction::UseContractNote(
-                    UseContractNoteInput { note_id, amount: AMOUNT, blinding: BLINDING },
+                    UseContractNoteInput { note_id, amount: AMOUNT, secret: SECRET },
                 ),
                 ClientAction::CreateEncNote(output),
                 ClientAction::InvokeExternal(
@@ -129,14 +127,14 @@ fn test_contract_note_lifecycle_binds_exact_actions_and_authorizes_atomically() 
     assert_eq!(controller_dispatcher.callback_count(), 1);
     assert_eq!(controller_dispatcher.last_created_note_id(), created.note_id);
     assert_eq!(controller_dispatcher.last_spent_nullifier(), 0);
-    assert_eq!(created.controller_class_hash, get_class_hash(controller));
+    assert_eq!(created.contract_class_hash, get_class_hash(controller));
     assert_eq!(
         test.privacy.get_contract_note(note_id: created.note_id),
         ContractNote {
             note_commitment: created.note_commitment,
             contract_address: controller,
-            controller_class_hash: created.controller_class_hash,
-            controller_commitment: CONTROLLER_COMMITMENT,
+            contract_class_hash: created.contract_class_hash,
+            policy_commitment: POLICY_COMMITMENT,
             token,
         },
     );
@@ -155,7 +153,7 @@ fn test_contract_note_lifecycle_binds_exact_actions_and_authorizes_atomically() 
         chain_id: get_execution_info().tx_info.chain_id,
         pool_address: test.privacy.address,
         note_id: created.note_id,
-        blinding: BLINDING,
+        secret: SECRET,
     );
     assert!(test.privacy.contract_note_nullifier_exists(:nullifier));
     assert_eq!(controller_dispatcher.callback_count(), 2);
@@ -166,8 +164,8 @@ fn test_contract_note_lifecycle_binds_exact_actions_and_authorizes_atomically() 
     let expected_event = events::ContractNoteUsed {
         nullifier,
         contract_address: controller,
-        controller_commitment: CONTROLLER_COMMITMENT,
-        controller_class_hash: created.controller_class_hash,
+        policy_commitment: POLICY_COMMITMENT,
+        contract_class_hash: created.contract_class_hash,
         token,
     };
     assert_expected_event_emitted(
@@ -196,7 +194,7 @@ fn test_contract_note_spend_requires_callback_and_rolls_back() {
             [
                 ClientAction::UseContractNote(
                     UseContractNoteInput {
-                        note_id: created.note_id, amount: AMOUNT, blinding: BLINDING,
+                        note_id: created.note_id, amount: AMOUNT, secret: SECRET,
                     },
                 ),
                 ClientAction::CreateEncNote(output),
@@ -209,7 +207,7 @@ fn test_contract_note_spend_requires_callback_and_rolls_back() {
         chain_id: get_execution_info().tx_info.chain_id,
         pool_address: test.privacy.address,
         note_id: created.note_id,
-        blinding: BLINDING,
+        secret: SECRET,
     );
     assert!(!test.privacy.contract_note_nullifier_exists(:nullifier));
 }
@@ -244,7 +242,7 @@ fn test_contract_note_spend_rejects_wrong_target_and_denial() {
         chain_id: get_execution_info().tx_info.chain_id,
         pool_address: test.privacy.address,
         note_id: created.note_id,
-        blinding: BLINDING,
+        secret: SECRET,
     );
     assert!(!test.privacy.contract_note_nullifier_exists(:nullifier));
 }
@@ -264,7 +262,21 @@ fn test_contract_note_spend_rejects_invalid_private_opening() {
             [
                 ClientAction::UseContractNote(
                     UseContractNoteInput {
-                        note_id: created.note_id, amount: AMOUNT + 1, blinding: BLINDING,
+                        note_id: created.note_id, amount: AMOUNT + 1, secret: SECRET,
+                    },
+                ),
+            ]
+                .span(),
+            expected_error: errors::INVALID_CONTRACT_NOTE_OPENING,
+        );
+    user
+        .assert_actions_panic(
+            [
+                ClientAction::UseContractNote(
+                    UseContractNoteInput {
+                        note_id: created.note_id,
+                        amount: AMOUNT,
+                        secret: 'WRONG_PRIVATE_NOTE_SECRET',
                     },
                 ),
             ]

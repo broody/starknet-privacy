@@ -41,10 +41,9 @@ const USER_PRIVATE_KEY: felt252 = 0x888;
 const CONTRACT_NOTE_CHAIN_ID: felt252 = 0x1111;
 const CONTRACT_NOTE_POOL: felt252 = 0x2222;
 const CONTRACT_ADDRESS: felt252 = 0x3333;
-const CONTROLLER_CLASS_HASH: felt252 = 0x4444;
-const CONTROLLER_COMMITMENT: felt252 = 0x5555;
-const CONTRACT_NOTE_NONCE: felt252 = 0x6666;
-const CONTRACT_NOTE_BLINDING: felt252 = 0x7777;
+const CONTRACT_CLASS_HASH: felt252 = 0x4444;
+const POLICY_COMMITMENT: felt252 = 0x5555;
+const CONTRACT_NOTE_SECRET: felt252 = 0x6666;
 
 fn to_address(addr: felt252) -> ContractAddress {
     addr.try_into().unwrap()
@@ -79,27 +78,27 @@ fn generate_reference_hashes() {
         pool_address: to_address(CONTRACT_NOTE_POOL),
         sender_addr: sender,
         contract_address: to_address(CONTRACT_ADDRESS),
-        controller_class_hash: to_class_hash(CONTROLLER_CLASS_HASH),
-        controller_commitment: CONTROLLER_COMMITMENT,
+        contract_class_hash: to_class_hash(CONTRACT_CLASS_HASH),
+        policy_commitment: POLICY_COMMITMENT,
         token: token,
-        nonce: CONTRACT_NOTE_NONCE,
+        secret: CONTRACT_NOTE_SECRET,
     );
     let contract_note_commitment = compute_contract_note_commitment(
         chain_id: CONTRACT_NOTE_CHAIN_ID,
         pool_address: to_address(CONTRACT_NOTE_POOL),
         note_id: contract_note_id,
         contract_address: to_address(CONTRACT_ADDRESS),
-        controller_class_hash: to_class_hash(CONTROLLER_CLASS_HASH),
-        controller_commitment: CONTROLLER_COMMITMENT,
+        contract_class_hash: to_class_hash(CONTRACT_CLASS_HASH),
+        policy_commitment: POLICY_COMMITMENT,
         token: token,
         amount: AMOUNT,
-        blinding: CONTRACT_NOTE_BLINDING,
+        secret: CONTRACT_NOTE_SECRET,
     );
     let contract_note_nullifier = compute_contract_note_nullifier(
         chain_id: CONTRACT_NOTE_CHAIN_ID,
         pool_address: to_address(CONTRACT_NOTE_POOL),
         note_id: contract_note_id,
-        blinding: CONTRACT_NOTE_BLINDING,
+        secret: CONTRACT_NOTE_SECRET,
     );
 
     // Outgoing channel id
@@ -173,10 +172,9 @@ fn generate_reference_hashes() {
     println!("inputs.contractNoteChainId: 0x{:x}", CONTRACT_NOTE_CHAIN_ID);
     println!("inputs.contractNotePool: 0x{:x}", CONTRACT_NOTE_POOL);
     println!("inputs.contractAddress: 0x{:x}", CONTRACT_ADDRESS);
-    println!("inputs.controllerClassHash: 0x{:x}", CONTROLLER_CLASS_HASH);
-    println!("inputs.controllerCommitment: 0x{:x}", CONTROLLER_COMMITMENT);
-    println!("inputs.contractNoteNonce: 0x{:x}", CONTRACT_NOTE_NONCE);
-    println!("inputs.contractNoteBlinding: 0x{:x}", CONTRACT_NOTE_BLINDING);
+    println!("inputs.contractClassHash: 0x{:x}", CONTRACT_CLASS_HASH);
+    println!("inputs.policyCommitment: 0x{:x}", POLICY_COMMITMENT);
+    println!("inputs.contractNoteSecret: 0x{:x}", CONTRACT_NOTE_SECRET);
 
     // Outputs (computed hashes)
     println!("outputs.channelKey: 0x{:x}", channel_key);

@@ -96,11 +96,10 @@ fn test_action_enum_discriminants_are_append_only() {
             ClientAction::CreateContractNote(
                 CreateContractNoteInput {
                     contract_address: 1.try_into().unwrap(),
-                    controller_commitment: 1,
+                    policy_commitment: 1,
                     token: 1.try_into().unwrap(),
                     amount: 1,
-                    nonce: 1,
-                    blinding: 1,
+                    secret: 1,
                 },
             ),
         ),
@@ -109,7 +108,7 @@ fn test_action_enum_discriminants_are_append_only() {
     assert_eq!(
         client_action_variant(
             ClientAction::UseContractNote(
-                UseContractNoteInput { note_id: 1, amount: 1, blinding: 1 },
+                UseContractNoteInput { note_id: 1, amount: 1, secret: 1 },
             ),
         ),
         11,

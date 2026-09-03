@@ -396,16 +396,16 @@ export class ActionCompiler {
     if (actions.useContractNotes) {
       for (const action of actions.useContractNotes) {
         const noteId = toBigInt(action.noteId);
-        const blinding = toBigInt(action.blinding);
+        const secret = toBigInt(action.secret);
         assert(noteId !== 0n, () => "Contract note ID must be non-zero");
         assert(action.amount > 0n, () => "Contract note amount must be positive");
-        assert(blinding !== 0n, () => "Contract note blinding must be non-zero");
+        assert(secret !== 0n, () => "Contract note secret must be non-zero");
         const input = {
           type: "UseContractNote",
           input: {
             note_id: noteId,
             amount: action.amount,
-            blinding,
+            secret,
           },
         } as const;
         execute(input, clientActions.useContractNotes);
@@ -455,24 +455,21 @@ export class ActionCompiler {
     if (actions.createContractNotes) {
       for (const action of actions.createContractNotes) {
         const contractAddress = toBigInt(action.contractAddress);
-        const controllerCommitment = toBigInt(action.controllerCommitment);
-        const nonce = toBigInt(action.nonce);
-        const blinding = toBigInt(action.blinding);
+        const policyCommitment = toBigInt(action.policyCommitment);
+        const secret = toBigInt(action.secret);
         assert(contractAddress !== 0n, () => "Contract address must be non-zero");
-        assert(controllerCommitment !== 0n, () => "Controller commitment must be non-zero");
+        assert(policyCommitment !== 0n, () => "Policy commitment must be non-zero");
         assert(action.token !== 0n, () => "Contract note token must be non-zero");
         assert(action.amount > 0n, () => "Contract note amount must be positive");
-        assert(nonce !== 0n, () => "Contract note nonce must be non-zero");
-        assert(blinding !== 0n, () => "Contract note blinding must be non-zero");
+        assert(secret !== 0n, () => "Contract note secret must be non-zero");
         const input = {
           type: "CreateContractNote",
           input: {
             contract_address: contractAddress,
-            controller_commitment: controllerCommitment,
+            policy_commitment: policyCommitment,
             token: action.token,
             amount: action.amount,
-            nonce,
-            blinding,
+            secret,
           },
         } as const;
         execute(input, clientActions.createContractNotes);
@@ -497,10 +494,10 @@ export class ActionCompiler {
 
     // surpluses were handled in resolveNotes
 
-    const controllerTargets = new Set(
+    const contractTargets = new Set(
       (actions.createContractNotes ?? []).map((note) => toBigInt(note.contractAddress))
     );
-    assert(controllerTargets.size <= 1, () => "A transaction may target only one note controller");
+    assert(contractTargets.size <= 1, () => "A transaction may target only one note contract");
     const hasContractNoteActions =
       (actions.useContractNotes?.length ?? 0) > 0 || (actions.createContractNotes?.length ?? 0) > 0;
     assert(
@@ -522,10 +519,10 @@ export class ActionCompiler {
     if (actions.invoke) {
       const call = actions.invoke.callBuilder(this.invokeBuilderArgs(clientActions, pool));
       const target = toBigInt(call.contractAddress);
-      const createdContractNoteController = controllerTargets.values().next().value;
+      const createdContractNoteTarget = contractTargets.values().next().value;
       assert(
-        createdContractNoteController === undefined || target === createdContractNoteController,
-        () => "The invoke target must match the controller of created contract notes"
+        createdContractNoteTarget === undefined || target === createdContractNoteTarget,
+        () => "The invoke target must match the contract of created contract notes"
       );
       const calldata = CallData.compile(call.calldata ?? []).map(toBigInt);
 
@@ -545,10 +542,10 @@ export class ActionCompiler {
         this.invokeBuilderArgs(clientActions, pool)
       );
       const target = toBigInt(details.contractAddress);
-      const createdContractNoteController = controllerTargets.values().next().value;
+      const createdContractNoteTarget = contractTargets.values().next().value;
       assert(
-        createdContractNoteController === undefined || target === createdContractNoteController,
-        () => "The invoke target must match the controller of created contract notes"
+        createdContractNoteTarget === undefined || target === createdContractNoteTarget,
+        () => "The invoke target must match the contract of created contract notes"
       );
       const compute_additional_data = CallData.compile(details.computeAdditionalData ?? []).map(
         toBigInt

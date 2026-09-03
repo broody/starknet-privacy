@@ -42,10 +42,9 @@ describe("Hash Compatibility with Cairo", () => {
   const contractNoteChainId = BigInt(inputs.contractNoteChainId);
   const contractNotePool = BigInt(inputs.contractNotePool);
   const contractAddress = BigInt(inputs.contractAddress);
-  const controllerClassHash = BigInt(inputs.controllerClassHash);
-  const controllerCommitment = BigInt(inputs.controllerCommitment);
-  const contractNoteNonce = BigInt(inputs.contractNoteNonce);
-  const contractNoteBlinding = BigInt(inputs.contractNoteBlinding);
+  const contractClassHash = BigInt(inputs.contractClassHash);
+  const policyCommitment = BigInt(inputs.policyCommitment);
+  const contractNoteSecret = BigInt(inputs.contractNoteSecret);
 
   it("compute_channel_key matches Cairo", () => {
     const result = compute_channel_key(sender, senderPrivateKey, recipient, recipientPublicKey);
@@ -118,10 +117,10 @@ describe("Hash Compatibility with Cairo", () => {
       contractNotePool,
       sender,
       contractAddress,
-      controllerClassHash,
-      controllerCommitment,
+      contractClassHash,
+      policyCommitment,
       token,
-      contractNoteNonce
+      contractNoteSecret
     );
     expect(contractNoteId.toString(16)).toBe(BigInt(outputs.contractNoteId).toString(16));
 
@@ -130,11 +129,11 @@ describe("Hash Compatibility with Cairo", () => {
       contractNotePool,
       contractNoteId,
       contractAddress,
-      controllerClassHash,
-      controllerCommitment,
+      contractClassHash,
+      policyCommitment,
       token,
       BigInt(inputs.amount),
-      contractNoteBlinding
+      contractNoteSecret
     );
     expect(noteCommitment.toString(16)).toBe(BigInt(outputs.contractNoteCommitment).toString(16));
     expect(
@@ -142,7 +141,7 @@ describe("Hash Compatibility with Cairo", () => {
         contractNoteChainId,
         contractNotePool,
         contractNoteId,
-        contractNoteBlinding
+        contractNoteSecret
       ).toString(16)
     ).toBe(BigInt(outputs.contractNoteNullifier).toString(16));
   });

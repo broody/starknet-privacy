@@ -196,22 +196,20 @@ export type UseNoteAction = {
   note: Note;
 };
 
-/** Private opening used to create a note controlled by a controller contract. */
+/** Private opening used to create a note controlled by an application contract. */
 export type ContractNoteCreation = {
   contractAddress: StarknetAddress;
-  controllerCommitment: BigNumberish;
+  policyCommitment: BigNumberish;
   amount: Amount;
   /** Secret, non-zero random felt retained by the creator until the note is spent. */
-  nonce: BigNumberish;
-  /** Secret, non-zero random felt retained with the amount opening. */
-  blinding: BigNumberish;
+  secret: BigNumberish;
 };
 
 /** Private opening of an existing contract note. */
 export type ContractNoteSpend = {
   noteId: NoteId;
   amount: Amount;
-  blinding: BigNumberish;
+  secret: BigNumberish;
 };
 
 export type CreateContractNoteAction = ContractNoteCreation & {
@@ -620,7 +618,7 @@ export interface TokenOperationsBuilder {
 
   /**
    * Consume contract notes as private inputs. The same transaction must call `.invoke()` (or
-   * `.computeAndInvoke()`) with the controller contract as its target; authorization failure
+   * `.computeAndInvoke()`) with the application contract as its target; authorization failure
    * reverts the complete transaction.
    */
   useContractNote(...notes: ContractNoteSpend[]): this;
@@ -641,9 +639,9 @@ export interface TokenOperationsBuilder {
   transfer(...outputs: TransferOutput[]): this;
 
   /**
-   * Create notes controlled by a controller contract. `nonce` and `blinding` are private openings:
-   * generate them cryptographically, never publish them, and retain them until spend. The same
-   * transaction must invoke the controller contract to authorize creation.
+   * Create notes controlled by an application contract. `secret` is a private opening: generate it
+   * cryptographically, never publish it, and retain it until spend. The same transaction must invoke
+   * the application contract to authorize creation.
    */
   createContractNote(...outputs: ContractNoteCreation[]): this;
 

@@ -111,15 +111,15 @@ pub struct ContractNoteCreated {
     /// The note ID.
     #[key]
     pub note_id: felt252,
-    /// The address of the controller contract.
+    /// The address of the application contract enforcing the note policy.
     #[key]
     pub contract_address: ContractAddress,
-    /// The application-specific controller commitment.
+    /// The application-specific policy commitment.
     #[key]
-    pub controller_commitment: felt252,
-    /// The controller implementation bound for the lifetime of the note.
-    pub controller_class_hash: ClassHash,
-    /// The note's token. Contract-note token types are intentionally public to the controller.
+    pub policy_commitment: felt252,
+    /// The contract implementation bound for the lifetime of the note.
+    pub contract_class_hash: ClassHash,
+    /// The note's token. Contract-note token types are intentionally public to the contract.
     pub token: ContractAddress,
     /// Hiding commitment to the private amount and blinding.
     pub note_commitment: felt252,
@@ -130,14 +130,14 @@ pub struct ContractNoteUsed {
     /// Secret-derived nullifier of the used contract note. This does not reveal its note ID.
     #[key]
     pub nullifier: felt252,
-    /// The address of the controller contract that authorized the spend.
+    /// The address of the application contract that authorized the spend.
     #[key]
     pub contract_address: ContractAddress,
     /// Application-specific policy commitment bound at creation.
     #[key]
-    pub controller_commitment: felt252,
+    pub policy_commitment: felt252,
     /// The implementation class bound at creation.
-    pub controller_class_hash: ClassHash,
+    pub contract_class_hash: ClassHash,
     /// Token released into the private transaction's conservation balance.
     pub token: ContractAddress,
 }

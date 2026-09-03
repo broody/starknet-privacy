@@ -12,7 +12,7 @@ function clientActions(calldata: unknown): ClientAction[] {
 }
 
 describe("contract note builder", () => {
-  it("compiles creation with explicit private openings and an atomic controller invoke", async () => {
+  it("compiles creation with a private secret and an atomic contract invoke", async () => {
     const { env, transfers } = createTestEnv();
 
     const result = await transfers.alice
@@ -21,10 +21,9 @@ describe("contract note builder", () => {
       .deposit({ amount: 37n })
       .createContractNote({
         contractAddress: CONTROLLER,
-        controllerCommitment: 91n,
+        policyCommitment: 91n,
         amount: 37n,
-        nonce: 123n,
-        blinding: 456n,
+        secret: 123n,
       })
       .done()
       .invoke(() => ({ contractAddress: CONTROLLER, calldata: [7n] }))
@@ -36,11 +35,10 @@ describe("contract note builder", () => {
         type: "CreateContractNote",
         input: {
           contract_address: 0xabcn,
-          controller_commitment: 91n,
+          policy_commitment: 91n,
           token: toBigInt(env.ace),
           amount: 37n,
-          nonce: 123n,
-          blinding: 456n,
+          secret: 123n,
         },
       },
       {
@@ -50,13 +48,13 @@ describe("contract note builder", () => {
     ]);
   });
 
-  it("compiles a controller spend before outputs and the controller invoke", async () => {
+  it("compiles a contract-note spend before outputs and the contract invoke", async () => {
     const { env, transfers } = createTestEnv();
 
     const result = await transfers.alice
       .build()
       .with(env.ace)
-      .useContractNote({ noteId: 123n, amount: 37n, blinding: 456n })
+      .useContractNote({ noteId: 123n, amount: 37n, secret: 456n })
       .withdraw({ recipient: env.alice.address, amount: 37n })
       .done()
       .invoke(() => ({ contractAddress: CONTROLLER, calldata: [] }))
@@ -69,7 +67,7 @@ describe("contract note builder", () => {
     ]);
   });
 
-  it("fails fast without an invoke or when a creation targets a different controller", async () => {
+  it("fails fast without an invoke or when a creation targets a different contract", async () => {
     const { env, transfers } = createTestEnv();
     const withoutInvoke = transfers.alice
       .build()
@@ -77,10 +75,9 @@ describe("contract note builder", () => {
       .deposit({ amount: 37n })
       .createContractNote({
         contractAddress: CONTROLLER,
-        controllerCommitment: 91n,
+        policyCommitment: 91n,
         amount: 37n,
-        nonce: 123n,
-        blinding: 456n,
+        secret: 123n,
       });
 
     await expect(withoutInvoke.createProofInvocation()).rejects.toThrow(
@@ -93,16 +90,15 @@ describe("contract note builder", () => {
       .deposit({ amount: 37n })
       .createContractNote({
         contractAddress: CONTROLLER,
-        controllerCommitment: 91n,
+        policyCommitment: 91n,
         amount: 37n,
-        nonce: 123n,
-        blinding: 456n,
+        secret: 123n,
       })
       .done()
       .invoke(() => ({ contractAddress: OTHER_CONTROLLER, calldata: [] }));
 
     await expect(wrongTarget.createProofInvocation()).rejects.toThrow(
-      "The invoke target must match the controller of created contract notes"
+      "The invoke target must match the contract of created contract notes"
     );
   });
 });
