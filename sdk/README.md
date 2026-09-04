@@ -69,27 +69,27 @@ const transfers = createPrivateTransfers({
 
 This section describes the recommended integration patterns. Each subsection gives one opinionated recipe — stick to it unless you have a specific reason to deviate.
 
-### Escrow notes
+### Controlled notes
 
-Escrow notes are contract-governed notes. Always add `.invoke()` (or `.computeAndInvoke()`)
-targeting the governing contract; the pool routes it to the dedicated escrow callback and reverts
-all note and application state if authorization or funding fails.
+Controlled notes are private bearer notes governed by an application contract. Always add exactly
+one `.invoke()` (or `.computeAndInvoke()`) targeting the controller. The pool privately supplies the
+controller with the canonical value transition during proving, then calls its proof-authorized apply
+entrypoint atomically with the pool mutations.
 
-Use `createEscrowNote` and `useEscrowNote` when the amount must remain private. For example, Whisper
-uses private-value escrow notes to keep sealed bids private while its auction contract controls
-settlement and refunds. Creation publishes only the controller and a hiding commitment; provide the
-same policy commitment again when spending so the pool can verify the private opening.
+For a sealed-bid auction, `spendKey` can be encrypted or committed under a VDF release policy. The
+controller validates the auction, private bid amount, and allowed settlement disposition without a
+threshold committee or custody service.
 
 ```typescript
 await transfers
   .build()
   .with(STRK)
   .inputs(fundingNote)
-  .createEscrowNote({
-    contractAddress: auction,
+  .createControlledNote({
+    controller: auction,
     policyCommitment: settlementCommitment,
     amount: bidAmount,
-    secret: privateRandomSecret,
+    spendKey: privateSpendKey,
   })
   .done()
   .invoke(() => ({ contractAddress: auction, calldata: [auctionId] }))
@@ -98,12 +98,12 @@ await transfers
 await transfers
   .build()
   .with(STRK)
-  .useEscrowNote({
-    noteId: escrowNoteId,
-    contractAddress: auction,
+  .useControlledNote({
+    noteId: controlledNoteId,
+    controller: auction,
     policyCommitment: settlementCommitment,
     amount: bidAmount,
-    secret: privateRandomSecret,
+    spendKey: privateSpendKey,
   })
   .withdraw({ amount: bidAmount })
   .done()
@@ -111,40 +111,22 @@ await transfers
   .execute();
 ```
 
-Use `createOpenEscrowNote` and `useOpenEscrowNote` when the amount can be public and is determined by
-the application callback. Creation does not consume private balance: the bound contract must fund
-the pending note exactly once in the same transaction. The invoke builder exposes the derived note
-ID so it can be included in application calldata.
+The invoke builder exposes newly derived controlled-note IDs, token, controller, and policy
+commitment, but never the private amount or spend key. Persist or encrypt the complete opening in the
+application layer; controlled notes are not discoverable through ordinary viewing-key channels.
 
-```typescript
-await transfers
-  .build()
-  .with(STRK)
-  .createOpenEscrowNote({
-    contractAddress: lendingMarket,
-    policyCommitment: positionCommitment,
-    secret: privateRandomSecret,
-  })
-  .done()
-  .invoke(({ openEscrowNotes }) => ({
-    contractAddress: lendingMarket,
-    calldata: [openEscrowNotes[0].noteId],
-  }))
-  .execute();
-```
+The controller implements `IControlledNoteController`: `privacy_validate_controlled_transition`
+(and its computation variant) plus `privacy_apply_controlled_transition`. Use
+`validate_controlled_validation_context` and `validate_controlled_apply_context` with the configured
+pool address so both stages authenticate their caller and context. For callback-funded outputs,
+create an ordinary open note in the same transaction and return its deposit from
+`ControlledInvokeResult`; there is no separate open controlled-note primitive.
 
-The `EscrowNote` token, amount, policy, and `secret` are private prover inputs at creation. Its spend
-reveals the token and policy, but not the consumed note ID; use a shared controller and keep
-note-specific openings out of public application calldata to preserve an anonymity set. The
-`OpenEscrowNote` token, policy, note ID, and amount are public and explicitly linkable. Generate
-secrets with cryptographic randomness, retain them until spend, and never log or publish them.
-The escrow callback must verify the pool caller, call `validate_escrow_invoke_context`, and
-bind any stored authorization to `actions_hash`; checking only the policy commitment does not
-constrain where the controlled value goes. It returns an `EscrowInvokeResult`; for each new
-`OpenEscrowNote`, this must contain a matching `OpenEscrowNoteDeposit`, and the application must
-approve the pool to pull that amount. Escrow notes remain bound to the application contract address
-across upgrades. Applications must preserve the callback ABI and policy semantics needed by
-outstanding notes, and can disable upgrades when immutability is required.
+Use a shared controller and keep note-specific openings out of public application calldata to
+preserve an anonymity set. Controlled notes remain bound to the controller address across upgrades,
+so preserve its callback and policy semantics for outstanding notes or make it immutable. A public
+VDF release also makes the spend-key-derived commitment blinding public; that fits bid reveal, but
+other applications should keep `spendKey` confidential when amount privacy must survive settlement.
 
 ### State management: go stateless
 

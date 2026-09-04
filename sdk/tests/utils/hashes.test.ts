@@ -20,12 +20,9 @@ import {
   compute_enc_sender_addr_hash,
   compute_enc_recipient_addr_hash,
   compute_outgoing_channel_id,
-  compute_escrow_note_id,
-  compute_escrow_note_commitment,
-  compute_escrow_note_nullifier,
-  compute_open_escrow_note_id,
-  compute_open_escrow_note_opening_commitment,
-  compute_open_escrow_note_nullifier,
+  compute_controlled_note_id,
+  compute_controlled_note_commitment,
+  compute_controlled_note_nullifier,
 } from "../../src/utils/hashes.js";
 import referenceHashes from "../fixtures/cairo-reference-data.json" with { type: "json" };
 
@@ -44,7 +41,7 @@ describe("Hash Compatibility with Cairo", () => {
   const sharedX = BigInt(inputs.sharedX);
   const contractAddress = BigInt(inputs.contractAddress);
   const policyCommitment = BigInt(inputs.policyCommitment);
-  const escrowNoteSecret = BigInt(inputs.escrowNoteSecret);
+  const controlledNoteSpendKey = BigInt(inputs.controlledNoteSpendKey);
 
   it("compute_channel_key matches Cairo", () => {
     const result = compute_channel_key(sender, senderPrivateKey, recipient, recipientPublicKey);
@@ -111,52 +108,27 @@ describe("Hash Compatibility with Cairo", () => {
     expect(result.toString(16)).toBe(BigInt(outputs.outgoingChannelId).toString(16));
   });
 
-  it("escrow note hashes match Cairo", () => {
-    const escrowNoteId = compute_escrow_note_id(
+  it("controlled note hashes match Cairo", () => {
+    const controlledNoteId = compute_controlled_note_id(
       sender,
       contractAddress,
       policyCommitment,
       token,
-      escrowNoteSecret
+      controlledNoteSpendKey
     );
-    expect(escrowNoteId.toString(16)).toBe(BigInt(outputs.escrowNoteId).toString(16));
+    expect(controlledNoteId.toString(16)).toBe(BigInt(outputs.controlledNoteId).toString(16));
 
-    const noteCommitment = compute_escrow_note_commitment(
-      escrowNoteId,
+    const noteCommitment = compute_controlled_note_commitment(
+      controlledNoteId,
       contractAddress,
       policyCommitment,
       token,
       BigInt(inputs.amount),
-      escrowNoteSecret
+      controlledNoteSpendKey
     );
-    expect(noteCommitment.toString(16)).toBe(BigInt(outputs.escrowNoteCommitment).toString(16));
-    expect(compute_escrow_note_nullifier(escrowNoteId, escrowNoteSecret).toString(16)).toBe(
-      BigInt(outputs.escrowNoteNullifier).toString(16)
-    );
-  });
-
-  it("open escrow note hashes match Cairo", () => {
-    const noteId = compute_open_escrow_note_id(
-      sender,
-      contractAddress,
-      policyCommitment,
-      token,
-      escrowNoteSecret
-    );
-    expect(noteId.toString(16)).toBe(BigInt(outputs.openEscrowNoteId).toString(16));
-
-    const openingCommitment = compute_open_escrow_note_opening_commitment(
-      noteId,
-      contractAddress,
-      policyCommitment,
-      token,
-      escrowNoteSecret
-    );
-    expect(openingCommitment.toString(16)).toBe(
-      BigInt(outputs.openEscrowNoteOpeningCommitment).toString(16)
-    );
-    expect(compute_open_escrow_note_nullifier(noteId, escrowNoteSecret).toString(16)).toBe(
-      BigInt(outputs.openEscrowNoteNullifier).toString(16)
-    );
+    expect(noteCommitment.toString(16)).toBe(BigInt(outputs.controlledNoteCommitment).toString(16));
+    expect(
+      compute_controlled_note_nullifier(controlledNoteId, controlledNoteSpendKey).toString(16)
+    ).toBe(BigInt(outputs.controlledNoteNullifier).toString(16));
   });
 });

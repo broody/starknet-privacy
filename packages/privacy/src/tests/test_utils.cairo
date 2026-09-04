@@ -10,9 +10,9 @@ use privacy::tests::utils_for_tests::{
 use privacy::utils::constants::{OPEN_NOTE_SALT, TWO_POW_120};
 use privacy::utils::{
     _encrypt_note_amount, compute_message_hash, decode_note_amount, decrypt_note_amount,
-    derive_public_key, deserialize_invoke_return_data, enc_note_packed_value, encrypt_channel_info,
-    encrypt_private_key, encrypt_subchannel_info, encrypt_user_addr, open_note, pack,
-    to_write_once_action, unify_address, unpack,
+    derive_public_key, deserialize_controlled_authorization, deserialize_invoke_return_data,
+    enc_note_packed_value, encrypt_channel_info, encrypt_private_key, encrypt_subchannel_info,
+    encrypt_user_addr, open_note, pack, to_write_once_action, unify_address, unpack,
 };
 use snforge_std::{get_class_hash, map_entry_address};
 use starknet::{ClassHash, ContractAddress};
@@ -314,6 +314,24 @@ fn test_deserialize_invoke_return_data_rejects_data_after_the_addresses() {
     return_data.append('EXTRA');
 
     deserialize_invoke_return_data(return_data.span());
+}
+
+#[test]
+fn test_deserialize_controlled_authorization_uses_a_fixed_span_abi() {
+    let authorization = ['FIRST', 'SECOND'].span();
+    let mut return_data = array![];
+    authorization.serialize(ref return_data);
+    assert_eq!(deserialize_controlled_authorization(return_data.span()), authorization);
+}
+
+#[test]
+#[should_panic(expected: 'INVALID_CONTROLLED_AUTH')]
+fn test_deserialize_controlled_authorization_rejects_trailing_data() {
+    let authorization = ['AUTHORIZED'].span();
+    let mut return_data = array![];
+    authorization.serialize(ref return_data);
+    return_data.append('EXTRA');
+    deserialize_controlled_authorization(return_data.span());
 }
 
 fn sample_open_note_deposit() -> OpenNoteDeposit {

@@ -7,37 +7,40 @@ pub mod Privacy {
     use openzeppelin::introspection::src5::SRC5Component;
     use openzeppelin::security::ReentrancyGuardComponent;
     use privacy::actions::{
-        AppendInput, ClientAction, ClientActionTrait, ComputeAndInvokeInput, CreateEncNoteInput,
-        CreateEscrowNoteInput, CreateOpenEscrowNoteInput, CreateOpenNoteInput, DepositInput,
+        AppendInput, ClientAction, ClientActionTrait, ComputeAndInvokeInput, ControlledInvokeInput,
+        CreateControlledNoteInput, CreateEncNoteInput, CreateOpenNoteInput, DepositInput,
         InputValidation, InvokeExternalInput, InvokeInput, OpenChannelInput, OpenSubchannelInput,
-        ServerAction, SetViewingKeyInput, TransferFromInput, TransferToInput, UseEscrowNoteInput,
-        UseNoteInput, UseOpenEscrowNoteInput, WithdrawInput, WriteOnceInput,
+        ServerAction, SetViewingKeyInput, TransferFromInput, TransferToInput,
+        UseControlledNoteInput, UseNoteInput, WithdrawInput, WriteOnceInput,
     };
     use privacy::errors::internal_errors;
     use privacy::hashes::{
-        compute_channel_key, compute_channel_marker, compute_escrow_note_commitment,
-        compute_escrow_note_id, compute_escrow_note_nullifier, compute_identity_key,
-        compute_note_id, compute_nullifier, compute_open_escrow_note_id,
-        compute_open_escrow_note_nullifier, compute_open_escrow_note_opening_commitment,
-        compute_outgoing_channel_id, compute_subchannel_id, compute_subchannel_marker,
+        compute_channel_key, compute_channel_marker, compute_controlled_note_commitment,
+        compute_controlled_note_id, compute_controlled_note_nullifier, compute_identity_key,
+        compute_note_id, compute_nullifier, compute_outgoing_channel_id, compute_subchannel_id,
+        compute_subchannel_marker,
     };
     use privacy::interface::{IAdmin, IClient, IServer, IViews};
     use privacy::objects::{
-        EncChannelInfo, EncOutgoingChannelInfo, EncPrivateKey, EncSubchannelInfo,
-        EscrowInvokeContext, EscrowNote, Note, OpenEscrowNote, OpenEscrowNoteDeposit,
-        OpenNoteDeposit, OpenNoteScreeningPolicy, TokenBalances, TokenBalancesTrait,
+        ControlledApplyContext, ControlledDeposit, ControlledInvokeResult, ControlledNote,
+        ControlledNoteOpening, ControlledTransition, ControlledValidationContext,
+        ControlledWithdrawal, EncChannelInfo, EncOutgoingChannelInfo, EncPrivateKey,
+        EncSubchannelInfo, Note, OpenNoteDeposit, OpenNoteOutput, OpenNoteScreeningPolicy,
+        PrivateNoteInput, PrivateNoteOutput, TokenBalances, TokenBalancesTrait,
     };
     use privacy::snip12::{ScreeningAttestation, is_screening_attestation_valid};
     use privacy::utils::constants::{
-        CONTRACT_VERSION, DEPOSITOR_VALIDATION_MAX_AGE, DEPOSITOR_VALIDATION_MAX_FUTURE,
-        ESCROW_INVOKE_SELECTOR, ESCROW_INVOKE_WITH_COMPUTATION_SELECTOR, INVOKE_SELECTOR,
+        CONTRACT_VERSION, CONTROLLED_APPLY_SELECTOR, CONTROLLED_NOTE_PROTOCOL_VERSION,
+        CONTROLLED_VALIDATE_SELECTOR, CONTROLLED_VALIDATE_WITH_COMPUTATION_SELECTOR,
+        DEPOSITOR_VALIDATION_MAX_AGE, DEPOSITOR_VALIDATION_MAX_FUTURE, INVOKE_SELECTOR,
         INVOKE_WITH_COMPUTATION_SELECTOR, OPEN_NOTE_SALT, PRIVACY_COMPUTE_SELECTOR,
         STRK_TOKEN_ADDRESS, VIRTUAL_SNOS, VIRTUAL_SNOS0,
     };
     use privacy::utils::{
-        ProofFacts, assert_valid_os_call, assert_valid_signature, compute_escrow_note_actions_hash,
-        compute_message_hash, decode_note_amount, derive_public_key,
-        deserialize_escrow_invoke_return_data, deserialize_invoke_return_data,
+        ProofFacts, assert_valid_os_call, assert_valid_signature,
+        compute_controlled_note_actions_hash, compute_message_hash, decode_note_amount,
+        derive_public_key, deserialize_controlled_authorization,
+        deserialize_controlled_invoke_return_data, deserialize_invoke_return_data,
         enc_note_packed_value, encrypt_channel_info, encrypt_outgoing_channel_info,
         encrypt_private_key, encrypt_subchannel_info, encrypt_user_addr,
         extract_compile_actions_inputs, extract_server_actions_from_panic, is_canonical_key,
@@ -122,12 +125,9 @@ pub mod Privacy {
         fee_collector: ContractAddress,
         /// The number of blocks that a proof is valid for.
         proof_validity_blocks: u64,
-        /// Escrow notes use a separate commitment-based representation from recipient notes.
+        /// Confidential bearer notes whose transitions are authorized by application controllers.
         /// Appended to preserve the deployed storage layout.
-        escrow_notes: Map<felt252, EscrowNote>,
-        /// Publicly valued escrow notes, initially pending until funded by their bound contract.
-        /// Appended to preserve the deployed storage layout.
-        open_escrow_notes: Map<felt252, OpenEscrowNote>,
+        controlled_notes: Map<felt252, ControlledNote>,
     }
 
     #[event]
@@ -155,11 +155,8 @@ pub mod Privacy {
         OpenNoteDeposited: events::OpenNoteDeposited,
         ExternalContractInvoked: events::ExternalContractInvoked,
         NoteUsed: events::NoteUsed,
-        EscrowNoteCreated: events::EscrowNoteCreated,
-        EscrowNoteUsed: events::EscrowNoteUsed,
-        OpenEscrowNoteCreated: events::OpenEscrowNoteCreated,
-        OpenEscrowNoteDeposited: events::OpenEscrowNoteDeposited,
-        OpenEscrowNoteUsed: events::OpenEscrowNoteUsed,
+        ControlledNoteCreated: events::ControlledNoteCreated,
+        ControlledNoteUsed: events::ControlledNoteUsed,
         FeeAmountSet: events::FeeAmountSet,
         FeeCollectorSet: events::FeeCollectorSet,
         ProofValidityBlocksSet: events::ProofValidityBlocksSet,
@@ -278,9 +275,12 @@ pub mod Privacy {
             assert(user_private_key.is_non_zero(), errors::ZERO_PRIVATE_KEY);
             assert(is_canonical_key(key: user_private_key), errors::PRIVATE_KEY_NOT_CANONICAL);
 
+            let (controlled_target, controlled_context) = self
+                ._controlled_validation_context(:user_addr, :user_private_key, :client_actions);
             let mut server_actions: Array<ServerAction> = array![];
             let mut curr_phase = ClientActionTrait::ACCOUNT_PHASE;
             let mut token_balances: TokenBalances = Default::default();
+            let mut controlled_authorized = false;
             // Used to ensure at least one client action provides replay protection (WriteOnce).
             let mut has_replay_protection = false;
             for client_action in client_actions {
@@ -307,10 +307,10 @@ pub mod Privacy {
                         .create_open_note(
                             sender_addr: user_addr, sender_private_key: user_private_key, :input,
                         ),
-                    ClientAction::CreateEscrowNote(input) => self
-                        .create_escrow_note(sender_addr: user_addr, :input, ref :token_balances),
-                    ClientAction::CreateOpenEscrowNote(input) => self
-                        .create_open_escrow_note(sender_addr: user_addr, :input),
+                    ClientAction::CreateControlledNote(input) => self
+                        .create_controlled_note(
+                            sender_addr: user_addr, :input, ref :token_balances,
+                        ),
                     ClientAction::UseNote(input) => self
                         .use_note(
                             owner_addr: user_addr,
@@ -318,20 +318,45 @@ pub mod Privacy {
                             :input,
                             ref :token_balances,
                         ),
-                    ClientAction::UseEscrowNote(input) => self
-                        .use_escrow_note(:input, ref :token_balances),
-                    ClientAction::UseOpenEscrowNote(input) => self
-                        .use_open_escrow_note(:input, ref :token_balances),
+                    ClientAction::UseControlledNote(input) => self
+                        .use_controlled_note(:input, ref :token_balances),
                     ClientAction::Withdraw(input) => self
                         .withdraw(:user_addr, :input, ref :token_balances),
-                    ClientAction::InvokeExternal(input) => self.invoke_external(:input),
-                    ClientAction::ComputeAndInvoke(input) => self
-                        .compute_and_invoke(:user_addr, :user_private_key, :input),
+                    ClientAction::InvokeExternal(input) => {
+                        if let Some(controller) = controlled_target {
+                            controlled_authorized = true;
+                            self
+                                .validate_controlled_invoke(
+                                    :controller, :controlled_context, :input,
+                                )
+                        } else {
+                            self.invoke_external(:input)
+                        }
+                    },
+                    ClientAction::ComputeAndInvoke(input) => {
+                        if let Some(controller) = controlled_target {
+                            controlled_authorized = true;
+                            self
+                                .validate_controlled_compute_and_invoke(
+                                    :user_addr,
+                                    :user_private_key,
+                                    :controller,
+                                    :controlled_context,
+                                    :input,
+                                )
+                        } else {
+                            self.compute_and_invoke(:user_addr, :user_private_key, :input)
+                        }
+                    },
                 };
                 self._client_apply_actions(actions: actions.span(), ref :has_replay_protection);
                 server_actions.extend(actions);
             }
             assert(has_replay_protection, errors::NO_REPLAY_PROTECTION);
+            assert(
+                controlled_target.is_none() || controlled_authorized,
+                errors::CONTROLLED_NOTE_AUTHORIZATION_REQUIRED,
+            );
             token_balances.squash().assert_valid();
 
             server_actions.span()
@@ -606,6 +631,73 @@ pub mod Privacy {
             ]
         }
 
+        fn validate_controlled_invoke(
+            self: @ContractState,
+            controller: ContractAddress,
+            controlled_context: ControlledValidationContext,
+            input: InvokeExternalInput,
+        ) -> Array<ServerAction> {
+            input.assert_valid();
+            let InvokeExternalInput { contract_address, calldata } = input;
+            assert(contract_address == controller, errors::CONTROLLED_NOTE_TARGET_MISMATCH);
+            let mut validation_calldata = array![];
+            controlled_context.serialize(ref validation_calldata);
+            calldata.serialize(ref validation_calldata);
+            let return_data = call_contract_syscall(
+                address: controller,
+                entry_point_selector: CONTROLLED_VALIDATE_SELECTOR,
+                calldata: validation_calldata.span(),
+            )
+                .unwrap_or_else(|panic_data| propagate_external_panic(panic_data.span()));
+            let authorization_data = deserialize_controlled_authorization(return_data);
+            array![
+                ServerAction::ControlledInvoke(
+                    ControlledInvokeInput {
+                        controller, authorization_data, calldata, source_selector: INVOKE_SELECTOR,
+                    },
+                ),
+            ]
+        }
+
+        fn validate_controlled_compute_and_invoke(
+            self: @ContractState,
+            user_addr: ContractAddress,
+            user_private_key: felt252,
+            controller: ContractAddress,
+            controlled_context: ControlledValidationContext,
+            input: ComputeAndInvokeInput,
+        ) -> Array<ServerAction> {
+            input.assert_valid();
+            let ComputeAndInvokeInput {
+                contract_address, compute_additional_data, invoke_additional_data,
+            } = input;
+            assert(contract_address == controller, errors::CONTROLLED_NOTE_TARGET_MISMATCH);
+            let identity_key = compute_identity_key(
+                :user_addr, :user_private_key, contract_address: controller,
+            );
+            let mut validation_calldata = array![];
+            controlled_context.serialize(ref validation_calldata);
+            identity_key.serialize(ref validation_calldata);
+            compute_additional_data.serialize(ref validation_calldata);
+            let return_data = call_contract_syscall(
+                address: controller,
+                entry_point_selector: CONTROLLED_VALIDATE_WITH_COMPUTATION_SELECTOR,
+                calldata: validation_calldata.span(),
+            )
+                .unwrap_or_else(|panic_data| propagate_external_panic(panic_data.span()));
+            let authorization_data = deserialize_controlled_authorization(return_data);
+            array![
+                ServerAction::ControlledInvoke(
+                    ControlledInvokeInput {
+                        controller,
+                        authorization_data,
+                        calldata: invoke_additional_data,
+                        source_selector: INVOKE_WITH_COMPUTATION_SELECTOR,
+                    },
+                ),
+            ]
+        }
+
         /// Returns the server actions to use a note.
         /// Assumes `owner_addr` is non-zero and `owner_private_key` is non-zero and canonical
         /// (checked in `main`).
@@ -738,150 +830,275 @@ pub mod Privacy {
             ]
         }
 
-        /// Returns the server actions to create an escrow note.
+        /// Returns the server actions to create a controlled note.
         /// Assumes `sender_addr` is non-zero (checked in `main`).
-        fn create_escrow_note(
+        fn create_controlled_note(
             self: @ContractState,
             sender_addr: ContractAddress,
-            input: CreateEscrowNoteInput,
+            input: CreateControlledNoteInput,
             ref token_balances: TokenBalances,
         ) -> Array<ServerAction> {
             input.assert_valid();
-            let CreateEscrowNoteInput {
-                contract_address, policy_commitment, token, amount, secret,
+            let CreateControlledNoteInput {
+                controller, policy_commitment, token, amount, spend_key,
             } = input;
-            // Keep the authenticated sender in the private note-id preimage. The secret-derived
+            // Keep the authenticated sender in the private note-id preimage. The spend-key-derived
             // nonce prevents public address enumeration.
-            let note_id = compute_escrow_note_id(
-                :sender_addr, :contract_address, :policy_commitment, :token, :secret,
+            let note_id = compute_controlled_note_id(
+                :sender_addr, :controller, :policy_commitment, :token, :spend_key,
             );
-            let note_commitment = compute_escrow_note_commitment(
-                :note_id, :contract_address, :policy_commitment, :token, :amount, :secret,
+            let note_commitment = compute_controlled_note_commitment(
+                :note_id, :controller, :policy_commitment, :token, :amount, :spend_key,
             );
             assert(note_commitment.is_non_zero(), internal_errors::ZERO_NOTE_VALUE);
 
             token_balances.subtract_balance(:token, :amount);
-            let note = EscrowNote { note_commitment, contract_address };
-            let storage_address = storage_path_to_felt252(path: self.escrow_notes.entry(note_id));
+            let note = ControlledNote { note_commitment, controller };
+            let storage_address = storage_path_to_felt252(
+                path: self.controlled_notes.entry(note_id),
+            );
 
             array![
                 to_write_once_action(:storage_address, value: note),
-                ServerAction::EmitEscrowNoteCreated(
-                    events::EscrowNoteCreated { note_id, contract_address, note_commitment },
+                ServerAction::EmitControlledNoteCreated(
+                    events::ControlledNoteCreated { note_id, controller, note_commitment },
                 ),
             ]
         }
 
-        /// Returns the server actions to spend an escrow note.
-        fn use_escrow_note(
-            self: @ContractState, input: UseEscrowNoteInput, ref token_balances: TokenBalances,
+        /// Returns the server actions to spend a controlled note.
+        fn use_controlled_note(
+            self: @ContractState, input: UseControlledNoteInput, ref token_balances: TokenBalances,
         ) -> Array<ServerAction> {
             input.assert_valid();
-            let UseEscrowNoteInput { note_id, policy_commitment, token, amount, secret } = input;
-            let note = self.escrow_notes.read(note_id);
-            assert(note.note_commitment.is_non_zero(), errors::ESCROW_NOTE_NOT_FOUND);
-            let expected_commitment = compute_escrow_note_commitment(
+            let UseControlledNoteInput {
+                note_id, policy_commitment, token, amount, spend_key,
+            } = input;
+            let note = self.controlled_notes.read(note_id);
+            assert(note.note_commitment.is_non_zero(), errors::CONTROLLED_NOTE_NOT_FOUND);
+            let expected_commitment = compute_controlled_note_commitment(
                 :note_id,
-                contract_address: note.contract_address,
+                controller: note.controller,
                 :policy_commitment,
                 :token,
                 :amount,
-                :secret,
+                :spend_key,
             );
             assert(
-                expected_commitment == note.note_commitment, errors::INVALID_ESCROW_NOTE_OPENING,
+                expected_commitment == note.note_commitment,
+                errors::INVALID_CONTROLLED_NOTE_OPENING,
             );
-            let nullifier = compute_escrow_note_nullifier(:note_id, :secret);
+            let nullifier = compute_controlled_note_nullifier(:note_id, :spend_key);
 
             token_balances.add_balance(:token, :amount);
             let storage_address = storage_path_to_felt252(path: self.nullifiers.entry(nullifier));
 
             array![
                 to_write_once_action(:storage_address, value: true),
-                ServerAction::EmitEscrowNoteUsed(
-                    events::EscrowNoteUsed {
-                        nullifier,
-                        contract_address: note.contract_address,
-                        policy_commitment,
-                        token,
+                ServerAction::EmitControlledNoteUsed(
+                    events::ControlledNoteUsed {
+                        nullifier, controller: note.controller, policy_commitment, token,
                     },
                 ),
             ]
         }
 
-        /// Returns the server action to create a pending open escrow note. Its bound application
-        /// contract must fund it through the escrow callback in the same transaction.
-        fn create_open_escrow_note(
-            self: @ContractState, sender_addr: ContractAddress, input: CreateOpenEscrowNoteInput,
-        ) -> Array<ServerAction> {
-            input.assert_valid();
-            let CreateOpenEscrowNoteInput {
-                contract_address, policy_commitment, token, secret,
-            } = input;
-            let note_id = compute_open_escrow_note_id(
-                :sender_addr, :contract_address, :policy_commitment, :token, :secret,
-            );
-            let opening_commitment = compute_open_escrow_note_opening_commitment(
-                :note_id, :contract_address, :policy_commitment, :token, :secret,
-            );
-            assert(opening_commitment.is_non_zero(), internal_errors::ZERO_NOTE_VALUE);
-            let note = OpenEscrowNote {
-                opening_commitment, amount: 0, contract_address, policy_commitment, token,
+        /// Builds the complete private value transition a controlled-note controller authorizes.
+        /// All fields are derived from the same client actions the pool validates and compiles.
+        fn _controlled_validation_context(
+            self: @ContractState,
+            user_addr: ContractAddress,
+            user_private_key: felt252,
+            client_actions: Span<ClientAction>,
+        ) -> (Option<ContractAddress>, ControlledValidationContext) {
+            let mut controlled_target: Option<ContractAddress> = None;
+            // Avoid inspecting ordinary private openings unless this transaction actually uses
+            // the controlled-note protocol. This preserves the base action validation order.
+            for action in client_actions {
+                match *action {
+                    ClientAction::UseControlledNote(input) => {
+                        let note = self.controlled_notes.read(input.note_id);
+                        self
+                            ._unify_controlled_target(
+                                ref target: controlled_target, reference: note.controller,
+                            );
+                    },
+                    ClientAction::CreateControlledNote(input) => self
+                        ._unify_controlled_target(
+                            ref target: controlled_target, reference: input.controller,
+                        ),
+                    _ => {},
+                }
+            }
+            let mut controlled_inputs: Array<ControlledNoteOpening> = array![];
+            let mut controlled_outputs: Array<ControlledNoteOpening> = array![];
+            let mut deposits: Array<ControlledDeposit> = array![];
+            let mut private_inputs: Array<PrivateNoteInput> = array![];
+            let mut private_outputs: Array<PrivateNoteOutput> = array![];
+            let mut open_outputs: Array<OpenNoteOutput> = array![];
+            let mut withdrawals: Array<ControlledWithdrawal> = array![];
+
+            if controlled_target.is_some() {
+                for action in client_actions {
+                    match *action {
+                        ClientAction::Deposit(input) => {
+                            deposits
+                                .append(
+                                    ControlledDeposit {
+                                        depositor: user_addr,
+                                        token: input.token,
+                                        amount: input.amount,
+                                    },
+                                );
+                        },
+                        ClientAction::UseNote(input) => {
+                            let note_id = compute_note_id(
+                                channel_key: input.channel_key,
+                                token: input.token,
+                                index: input.index,
+                            );
+                            let packed_value = self.notes.entry(note_id).packed_value.read();
+                            let amount = decode_note_amount(
+                                :packed_value,
+                                channel_key: input.channel_key,
+                                token: input.token,
+                                index: input.index,
+                            );
+                            let nullifier = compute_nullifier(
+                                channel_key: input.channel_key,
+                                token: input.token,
+                                index: input.index,
+                                owner_private_key: user_private_key,
+                            );
+                            private_inputs
+                                .append(
+                                    PrivateNoteInput {
+                                        note_id, nullifier, token: input.token, amount,
+                                    },
+                                );
+                        },
+                        ClientAction::UseControlledNote(input) => {
+                            let note = self.controlled_notes.read(input.note_id);
+                            self
+                                ._unify_controlled_target(
+                                    ref target: controlled_target, reference: note.controller,
+                                );
+                            controlled_inputs
+                                .append(
+                                    ControlledNoteOpening {
+                                        note_id: input.note_id,
+                                        policy_commitment: input.policy_commitment,
+                                        token: input.token,
+                                        amount: input.amount,
+                                        spend_key: input.spend_key,
+                                    },
+                                );
+                        },
+                        ClientAction::CreateEncNote(input) => {
+                            let channel_key = compute_channel_key(
+                                sender_addr: user_addr,
+                                sender_private_key: user_private_key,
+                                recipient_addr: input.recipient_addr,
+                                recipient_public_key: input.recipient_public_key,
+                            );
+                            let note_id = compute_note_id(
+                                :channel_key, token: input.token, index: input.index,
+                            );
+                            private_outputs
+                                .append(
+                                    PrivateNoteOutput {
+                                        note_id,
+                                        recipient: input.recipient_addr,
+                                        token: input.token,
+                                        amount: input.amount,
+                                    },
+                                );
+                        },
+                        ClientAction::CreateOpenNote(input) => {
+                            let channel_key = compute_channel_key(
+                                sender_addr: user_addr,
+                                sender_private_key: user_private_key,
+                                recipient_addr: input.recipient_addr,
+                                recipient_public_key: input.recipient_public_key,
+                            );
+                            let note_id = compute_note_id(
+                                :channel_key, token: input.token, index: input.index,
+                            );
+                            open_outputs
+                                .append(
+                                    OpenNoteOutput {
+                                        note_id,
+                                        recipient: input.recipient_addr,
+                                        token: input.token,
+                                    },
+                                );
+                        },
+                        ClientAction::CreateControlledNote(input) => {
+                            self
+                                ._unify_controlled_target(
+                                    ref target: controlled_target, reference: input.controller,
+                                );
+                            let note_id = compute_controlled_note_id(
+                                sender_addr: user_addr,
+                                controller: input.controller,
+                                policy_commitment: input.policy_commitment,
+                                token: input.token,
+                                spend_key: input.spend_key,
+                            );
+                            controlled_outputs
+                                .append(
+                                    ControlledNoteOpening {
+                                        note_id,
+                                        policy_commitment: input.policy_commitment,
+                                        token: input.token,
+                                        amount: input.amount,
+                                        spend_key: input.spend_key,
+                                    },
+                                );
+                        },
+                        ClientAction::Withdraw(input) => {
+                            withdrawals
+                                .append(
+                                    ControlledWithdrawal {
+                                        recipient: input.to_addr,
+                                        token: input.token,
+                                        amount: input.amount,
+                                    },
+                                );
+                        },
+                        _ => {},
+                    }
+                }
+            }
+
+            let execution_info = get_execution_info();
+            let context = ControlledValidationContext {
+                protocol_version: CONTROLLED_NOTE_PROTOCOL_VERSION,
+                chain_id: execution_info.tx_info.chain_id,
+                pool_address: get_contract_address(),
+                executor: user_addr,
+                transition: ControlledTransition {
+                    controlled_inputs: controlled_inputs.span(),
+                    controlled_outputs: controlled_outputs.span(),
+                    deposits: deposits.span(),
+                    private_inputs: private_inputs.span(),
+                    private_outputs: private_outputs.span(),
+                    open_outputs: open_outputs.span(),
+                    withdrawals: withdrawals.span(),
+                },
             };
-            let storage_address = storage_path_to_felt252(
-                path: self.open_escrow_notes.entry(note_id),
-            );
-
-            array![
-                to_write_once_action(:storage_address, value: note),
-                ServerAction::EmitOpenEscrowNoteCreated(
-                    events::OpenEscrowNoteCreated {
-                        note_id, contract_address, policy_commitment, token, opening_commitment,
-                    },
-                ),
-            ]
+            (controlled_target, context)
         }
 
-        /// Returns the server action to consume a funded open escrow note.
-        fn use_open_escrow_note(
-            self: @ContractState, input: UseOpenEscrowNoteInput, ref token_balances: TokenBalances,
-        ) -> Array<ServerAction> {
-            input.assert_valid();
-            let UseOpenEscrowNoteInput { note_id, amount, secret } = input;
-            let note = self.open_escrow_notes.read(note_id);
-            assert(note.opening_commitment.is_non_zero(), errors::OPEN_ESCROW_NOTE_NOT_FOUND);
-            assert(note.amount.is_non_zero(), errors::OPEN_ESCROW_NOTE_NOT_FUNDED);
-            assert(note.amount == amount, errors::INVALID_OPEN_ESCROW_NOTE_OPENING);
-            let expected_opening_commitment = compute_open_escrow_note_opening_commitment(
-                :note_id,
-                contract_address: note.contract_address,
-                policy_commitment: note.policy_commitment,
-                token: note.token,
-                :secret,
-            );
-            assert(
-                expected_opening_commitment == note.opening_commitment,
-                errors::INVALID_OPEN_ESCROW_NOTE_OPENING,
-            );
-            let nullifier = compute_open_escrow_note_nullifier(:note_id, :secret);
-
-            token_balances.add_balance(token: note.token, amount: note.amount);
-            let storage_address = storage_path_to_felt252(path: self.nullifiers.entry(nullifier));
-
-            array![
-                to_write_once_action(:storage_address, value: true),
-                ServerAction::EmitOpenEscrowNoteUsed(
-                    events::OpenEscrowNoteUsed {
-                        nullifier,
-                        contract_address: note.contract_address,
-                        policy_commitment: note.policy_commitment,
-                        token: note.token,
-                        amount: note.amount,
-                    },
-                ),
-            ]
+        fn _unify_controlled_target(
+            self: @ContractState, ref target: Option<ContractAddress>, reference: ContractAddress,
+        ) {
+            if let Some(existing) = target {
+                assert(existing == reference, errors::MULTIPLE_CONTROLLED_TARGETS);
+            } else {
+                target = Some(reference);
+            }
         }
-
 
         /// Validates preconditions and computes values needed for creating a note.
         /// Returns `(channel_key, storage_address, note_id)`.
@@ -938,16 +1155,15 @@ pub mod Privacy {
                     ServerAction::TransferTo(_) => {},
                     ServerAction::Invoke(_) => {},
                     ServerAction::InvokeWithComputation(_) => {},
+                    ServerAction::ControlledInvoke(_) => {},
                     ServerAction::EmitViewingKeySet(_) => {},
                     ServerAction::EmitWithdrawal(_) => {},
                     ServerAction::EmitDeposit(_) => {},
                     ServerAction::EmitOpenNoteCreated(_) => {},
                     ServerAction::EmitEncNoteCreated(_) => {},
                     ServerAction::EmitNoteUsed(_) => {},
-                    ServerAction::EmitEscrowNoteCreated(_) => {},
-                    ServerAction::EmitEscrowNoteUsed(_) => {},
-                    ServerAction::EmitOpenEscrowNoteCreated(_) => {},
-                    ServerAction::EmitOpenEscrowNoteUsed(_) => {},
+                    ServerAction::EmitControlledNoteCreated(_) => {},
+                    ServerAction::EmitControlledNoteUsed(_) => {},
                 }
             }
         }
@@ -1038,12 +1254,12 @@ pub mod Privacy {
         fn _apply_actions(
             ref self: ContractState, actions: Span<ServerAction>,
         ) -> Option<ContractAddress> {
-            let contract_address = self._collect_escrow_note_actions(:actions);
             let execution_info = get_execution_info();
             let mut serialized_actions = array![];
             actions.serialize(ref serialized_actions);
-            let escrow_invoke_context = EscrowInvokeContext {
-                actions_hash: compute_escrow_note_actions_hash(
+            let controlled_context = ControlledApplyContext {
+                protocol_version: CONTROLLED_NOTE_PROTOCOL_VERSION,
+                actions_hash: compute_controlled_note_actions_hash(
                     :actions,
                     chain_id: execution_info.tx_info.chain_id,
                     pool_address: get_contract_address(),
@@ -1051,9 +1267,7 @@ pub mod Privacy {
                 serialized_actions: serialized_actions.span(),
             };
             let mut undeposited_open_notes: usize = Zero::zero();
-            let mut undeposited_open_escrow_notes: usize = Zero::zero();
             let mut screening_subject: Option<ContractAddress> = None;
-            let mut escrow_callback_applied = false;
             for action in actions {
                 match *action {
                     ServerAction::WriteOnce(input) => self._apply_write_once(:input),
@@ -1063,46 +1277,27 @@ pub mod Privacy {
                         self._apply_transfer_from(:input);
                     },
                     ServerAction::TransferTo(input) => self._apply_transfer_to(:input),
-                    ServerAction::Invoke(input) => {
-                        let (selector, context) = self
-                            ._escrow_invoke_parameters(
-                                :input,
-                                standard_selector: INVOKE_SELECTOR,
-                                escrow_selector: ESCROW_INVOKE_SELECTOR,
-                                :contract_address,
-                                :escrow_invoke_context,
-                                ref :escrow_callback_applied,
-                            );
-                        self
-                            ._apply_invoke_and_deposits(
-                                :input,
-                                :selector,
-                                :context,
-                                ref :undeposited_open_notes,
-                                ref :undeposited_open_escrow_notes,
-                                ref :screening_subject,
-                            );
-                    },
-                    ServerAction::InvokeWithComputation(input) => {
-                        let (selector, context) = self
-                            ._escrow_invoke_parameters(
-                                :input,
-                                standard_selector: INVOKE_WITH_COMPUTATION_SELECTOR,
-                                escrow_selector: ESCROW_INVOKE_WITH_COMPUTATION_SELECTOR,
-                                :contract_address,
-                                :escrow_invoke_context,
-                                ref :escrow_callback_applied,
-                            );
-                        self
-                            ._apply_invoke_and_deposits(
-                                :input,
-                                :selector,
-                                :context,
-                                ref :undeposited_open_notes,
-                                ref :undeposited_open_escrow_notes,
-                                ref :screening_subject,
-                            );
-                    },
+                    ServerAction::Invoke(input) => self
+                        ._apply_invoke_and_deposits(
+                            :input,
+                            selector: INVOKE_SELECTOR,
+                            ref :undeposited_open_notes,
+                            ref :screening_subject,
+                        ),
+                    ServerAction::InvokeWithComputation(input) => self
+                        ._apply_invoke_and_deposits(
+                            :input,
+                            selector: INVOKE_WITH_COMPUTATION_SELECTOR,
+                            ref :undeposited_open_notes,
+                            ref :screening_subject,
+                        ),
+                    ServerAction::ControlledInvoke(input) => self
+                        ._apply_controlled_invoke_and_deposits(
+                            :input,
+                            context: controlled_context,
+                            ref :undeposited_open_notes,
+                            ref :screening_subject,
+                        ),
                     ServerAction::EmitViewingKeySet(event) => self.emit(event),
                     ServerAction::EmitWithdrawal(event) => self.emit(event),
                     ServerAction::EmitDeposit(event) => self.emit(event),
@@ -1112,93 +1307,12 @@ pub mod Privacy {
                     },
                     ServerAction::EmitEncNoteCreated(event) => self.emit(event),
                     ServerAction::EmitNoteUsed(event) => self.emit(event),
-                    ServerAction::EmitEscrowNoteCreated(event) => self.emit(event),
-                    ServerAction::EmitEscrowNoteUsed(event) => self.emit(event),
-                    ServerAction::EmitOpenEscrowNoteCreated(event) => {
-                        self.emit(event);
-                        undeposited_open_escrow_notes += 1;
-                    },
-                    ServerAction::EmitOpenEscrowNoteUsed(event) => self.emit(event),
+                    ServerAction::EmitControlledNoteCreated(event) => self.emit(event),
+                    ServerAction::EmitControlledNoteUsed(event) => self.emit(event),
                 };
             }
             assert(undeposited_open_notes == Zero::zero(), errors::UNDEPOSITED_OPEN_NOTES);
-            assert(
-                undeposited_open_escrow_notes == Zero::zero(),
-                errors::UNDEPOSITED_OPEN_ESCROW_NOTES,
-            );
-            assert(
-                contract_address.is_none() || escrow_callback_applied,
-                errors::ESCROW_NOTE_CALLBACK_REQUIRED,
-            );
             screening_subject
-        }
-
-        fn _collect_escrow_note_actions(
-            self: @ContractState, actions: Span<ServerAction>,
-        ) -> Option<ContractAddress> {
-            let mut contract_address: Option<ContractAddress> = None;
-            for action in actions {
-                match *action {
-                    ServerAction::EmitEscrowNoteCreated(event) => {
-                        self
-                            ._unify_escrow_target(
-                                ref :contract_address, reference_address: event.contract_address,
-                            );
-                    },
-                    ServerAction::EmitEscrowNoteUsed(event) => {
-                        self
-                            ._unify_escrow_target(
-                                ref :contract_address, reference_address: event.contract_address,
-                            );
-                    },
-                    ServerAction::EmitOpenEscrowNoteCreated(event) => {
-                        self
-                            ._unify_escrow_target(
-                                ref :contract_address, reference_address: event.contract_address,
-                            );
-                    },
-                    ServerAction::EmitOpenEscrowNoteUsed(event) => {
-                        self
-                            ._unify_escrow_target(
-                                ref :contract_address, reference_address: event.contract_address,
-                            );
-                    },
-                    _ => {},
-                }
-            }
-            contract_address
-        }
-
-        fn _unify_escrow_target(
-            self: @ContractState,
-            ref contract_address: Option<ContractAddress>,
-            reference_address: ContractAddress,
-        ) {
-            if let Some(existing_address) = contract_address {
-                assert(existing_address == reference_address, errors::MULTIPLE_ESCROW_TARGETS);
-            } else {
-                contract_address = Option::Some(reference_address);
-            }
-        }
-
-        fn _escrow_invoke_parameters(
-            self: @ContractState,
-            input: InvokeInput,
-            standard_selector: felt252,
-            escrow_selector: felt252,
-            contract_address: Option<ContractAddress>,
-            escrow_invoke_context: EscrowInvokeContext,
-            ref escrow_callback_applied: bool,
-        ) -> (felt252, Option<EscrowInvokeContext>) {
-            if let Some(required_address) = contract_address {
-                assert(
-                    input.contract_address == required_address, errors::ESCROW_NOTE_TARGET_MISMATCH,
-                );
-                escrow_callback_applied = true;
-                (escrow_selector, Option::Some(escrow_invoke_context))
-            } else {
-                (standard_selector, Option::None)
-            }
         }
 
         /// Verifies the tx's screening attestation: it must be fresh (not older than
@@ -1284,70 +1398,82 @@ pub mod Privacy {
             ref self: ContractState,
             input: InvokeInput,
             selector: felt252,
-            context: Option<EscrowInvokeContext>,
             ref undeposited_open_notes: usize,
-            ref undeposited_open_escrow_notes: usize,
             ref screening_subject: Option<ContractAddress>,
         ) {
             let InvokeInput { contract_address, calldata } = input;
-            let is_escrow_callback = context.is_some();
-            let mut effective_calldata = array![];
-            if let Some(escrow_invoke_context) = context {
-                escrow_invoke_context.serialize(ref effective_calldata);
-            }
-            effective_calldata.append_span(calldata);
             let return_data = call_contract_syscall(
-                address: contract_address,
-                entry_point_selector: selector,
-                calldata: effective_calldata.span(),
+                address: contract_address, entry_point_selector: selector, :calldata,
             )
                 .unwrap_syscall();
             self.emit(events::ExternalContractInvoked { contract_address, selector });
 
-            if is_escrow_callback {
-                let result = deserialize_escrow_invoke_return_data(return_data);
-                self
-                    ._apply_callback_deposits(
-                        depositor: contract_address,
-                        deposits: result.open_note_deposits,
-                        open_escrow_deposits: result.open_escrow_note_deposits,
-                        associated_addresses: Some(result.associated_addresses),
-                        :selector,
-                        ref :undeposited_open_notes,
-                        ref :undeposited_open_escrow_notes,
-                        ref :screening_subject,
-                    );
-            } else {
-                let (deposits, associated_addresses) = deserialize_invoke_return_data(return_data);
-                let open_escrow_deposits: Array<OpenEscrowNoteDeposit> = array![];
-                self
-                    ._apply_callback_deposits(
-                        depositor: contract_address,
-                        :deposits,
-                        open_escrow_deposits: open_escrow_deposits.span(),
-                        :associated_addresses,
-                        :selector,
-                        ref :undeposited_open_notes,
-                        ref :undeposited_open_escrow_notes,
-                        ref :screening_subject,
-                    );
-            }
+            let (deposits, associated_addresses) = deserialize_invoke_return_data(return_data);
+            self
+                ._apply_callback_deposits(
+                    depositor: contract_address,
+                    :deposits,
+                    :associated_addresses,
+                    :selector,
+                    ref :undeposited_open_notes,
+                    ref :screening_subject,
+                );
         }
 
-        /// Applies regular and escrow open-note deposits returned from an application callback.
+        /// Applies a proof-authorized controller transition and its returned open-note deposits.
+        fn _apply_controlled_invoke_and_deposits(
+            ref self: ContractState,
+            input: ControlledInvokeInput,
+            context: ControlledApplyContext,
+            ref undeposited_open_notes: usize,
+            ref screening_subject: Option<ContractAddress>,
+        ) {
+            let ControlledInvokeInput {
+                controller, authorization_data, calldata, source_selector,
+            } = input;
+            let mut effective_calldata = array![];
+            context.serialize(ref effective_calldata);
+            authorization_data.serialize(ref effective_calldata);
+            calldata.serialize(ref effective_calldata);
+            let return_data = call_contract_syscall(
+                address: controller,
+                entry_point_selector: CONTROLLED_APPLY_SELECTOR,
+                calldata: effective_calldata.span(),
+            )
+                .unwrap_syscall();
+            self
+                .emit(
+                    events::ExternalContractInvoked {
+                        contract_address: controller, selector: CONTROLLED_APPLY_SELECTOR,
+                    },
+                );
+
+            let ControlledInvokeResult {
+                open_note_deposits, associated_addresses,
+            } = deserialize_controlled_invoke_return_data(return_data);
+            self
+                ._apply_callback_deposits(
+                    depositor: controller,
+                    deposits: open_note_deposits,
+                    associated_addresses: Some(associated_addresses),
+                    selector: source_selector,
+                    ref :undeposited_open_notes,
+                    ref :screening_subject,
+                );
+        }
+
+        /// Applies open-note deposits returned from an application callback.
         fn _apply_callback_deposits(
             ref self: ContractState,
             depositor: ContractAddress,
             deposits: Span<OpenNoteDeposit>,
-            open_escrow_deposits: Span<OpenEscrowNoteDeposit>,
             associated_addresses: Option<Span<ContractAddress>>,
             selector: felt252,
             ref undeposited_open_notes: usize,
-            ref undeposited_open_escrow_notes: usize,
             ref screening_subject: Option<ContractAddress>,
         ) {
             // Screening, if required, has its subject defined by the depositor's screening policy.
-            if !deposits.is_empty() || !open_escrow_deposits.is_empty() {
+            if !deposits.is_empty() {
                 match self.open_note_depositor_screening_policies.read(depositor) {
                     OpenNoteScreeningPolicy::Required => unify_address(
                         ref screening_subject, reference: depositor,
@@ -1355,8 +1481,7 @@ pub mod Privacy {
                     OpenNoteScreeningPolicy::Exempt => {},
                     OpenNoteScreeningPolicy::Delegated => {
                         // Only a compute-invoke is delegated; a plain invoke is exempt.
-                        if selector == INVOKE_WITH_COMPUTATION_SELECTOR
-                            || selector == ESCROW_INVOKE_WITH_COMPUTATION_SELECTOR {
+                        if selector == INVOKE_WITH_COMPUTATION_SELECTOR {
                             let associated_addresses = associated_addresses
                                 .expect(errors::INVALID_ASSOCIATED_ADDRESSES);
                             assert(!associated_addresses.is_empty(), errors::NO_ASSOCIATED_ADDRESS);
@@ -1374,43 +1499,7 @@ pub mod Privacy {
                 undeposited_open_notes = undeposited_open_notes
                     .checked_sub(deposits.len())
                     .expect(internal_errors::TOO_MANY_OPEN_NOTES_DEPOSITED);
-                for deposit in open_escrow_deposits {
-                    self._deposit_to_open_escrow_note(:depositor, deposit: *deposit);
-                }
-                undeposited_open_escrow_notes = undeposited_open_escrow_notes
-                    .checked_sub(open_escrow_deposits.len())
-                    .expect(internal_errors::TOO_MANY_OPEN_ESCROWS_DEPOSITED);
             }
-        }
-
-        /// Funds a pending open escrow note from its bound application contract.
-        fn _deposit_to_open_escrow_note(
-            ref self: ContractState, depositor: ContractAddress, deposit: OpenEscrowNoteDeposit,
-        ) {
-            let OpenEscrowNoteDeposit { note_id, amount } = deposit;
-            assert(note_id.is_non_zero(), errors::ZERO_NOTE_ID);
-            assert(amount.is_non_zero(), errors::ZERO_AMOUNT);
-
-            let note_entry = self.open_escrow_notes.entry(note_id);
-            let mut note = note_entry.read();
-            assert(note.opening_commitment.is_non_zero(), errors::OPEN_ESCROW_NOTE_NOT_FOUND);
-            assert(note.contract_address == depositor, errors::OPEN_ESCROW_NOTE_TARGET_MISMATCH);
-            assert(note.amount.is_zero(), errors::OPEN_ESCROW_NOTE_ALREADY_FUNDED);
-            note.amount = amount;
-            note_entry.write(note);
-
-            checked_transfer_from(
-                token_address: note.token,
-                sender: depositor,
-                recipient: get_contract_address(),
-                amount: amount.into(),
-            );
-            self
-                .emit(
-                    events::OpenEscrowNoteDeposited {
-                        note_id, contract_address: note.contract_address, token: note.token, amount,
-                    },
-                );
         }
 
         /// Applies a single deposit to an open note. Used when applying the span returned by an
@@ -1482,12 +1571,8 @@ pub mod Privacy {
             self.notes.read(note_id)
         }
 
-        fn get_escrow_note(self: @ContractState, note_id: felt252) -> EscrowNote {
-            self.escrow_notes.read(note_id)
-        }
-
-        fn get_open_escrow_note(self: @ContractState, note_id: felt252) -> OpenEscrowNote {
-            self.open_escrow_notes.read(note_id)
+        fn get_controlled_note(self: @ContractState, note_id: felt252) -> ControlledNote {
+            self.controlled_notes.read(note_id)
         }
 
         fn nullifier_exists(self: @ContractState, nullifier: felt252) -> bool {

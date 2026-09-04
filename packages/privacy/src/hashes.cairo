@@ -37,26 +37,18 @@ pub mod domain_separation {
     pub const OUTGOING_CHANNEL_ID_TAG: felt252 = 'OUTGOING_CHANNEL_ID_TAG:V1';
     /// Tag for `identity_key`.
     pub const IDENTITY_KEY_TAG: felt252 = 'IDENTITY_KEY_TAG:V1';
-    /// Tag for an escrow note ID.
-    pub const ESCROW_NOTE_ID_TAG: felt252 = 'ESCROW_NOTE_ID_TAG:V1';
-    /// Tag for deriving an escrow note's private ID nonce from its secret.
-    pub const ESCROW_NOTE_NONCE_TAG: felt252 = 'ESCROW_NOTE_NONCE_TAG:V1';
-    /// Tag for deriving an escrow note's private amount blinding from its secret.
-    pub const ESCROW_NOTE_BLINDING_TAG: felt252 = 'ESCROW_NOTE_BLINDING_TAG:V1';
-    /// Tag for an escrow note's hiding commitment.
-    pub const ESCROW_NOTE_COMMIT_TAG: felt252 = 'ESCROW_NOTE_COMMIT_TAG:V1';
-    /// Tag for `escrow_note_nullifier`.
-    pub const ESCROW_NOTE_NULLIFIER_TAG: felt252 = 'ESCROW_NOTE_NULLIFIER_TAG:V1';
-    /// Tag for the exact server-action list authorized by an escrow-note callback.
-    pub const ESCROW_NOTE_ACTIONS_TAG: felt252 = 'ESCROW_NOTE_ACTIONS_TAG:V1';
-    /// Tag for an open escrow note ID.
-    pub const OPEN_ESCROW_NOTE_ID_TAG: felt252 = 'OPEN_ESCROW_ID_TAG:V1';
-    /// Tag for deriving an open escrow note's private ID nonce from its secret.
-    pub const OPEN_ESCROW_NOTE_NONCE_TAG: felt252 = 'OPEN_ESCROW_NONCE_TAG:V1';
-    /// Tag for an open escrow note's secret-opening commitment.
-    pub const OPEN_ESCROW_NOTE_COMMIT_TAG: felt252 = 'OPEN_ESCROW_COMMIT_TAG:V1';
-    /// Tag for an open escrow note nullifier.
-    pub const OPEN_ESCROW_NOTE_NULLIFIER_TAG: felt252 = 'OPEN_ESCROW_NULLIFIER_TAG:V1';
+    /// Tag for a controlled note ID.
+    pub const CONTROLLED_NOTE_ID_TAG: felt252 = 'CONTROLLED_NOTE_ID_TAG:V1';
+    /// Tag for deriving a controlled note's private ID nonce from its spend key.
+    pub const CONTROLLED_NOTE_NONCE_TAG: felt252 = 'CONTROLLED_NOTE_NONCE_TAG:V1';
+    /// Tag for deriving a controlled note's private value blinding from its spend key.
+    pub const CONTROLLED_NOTE_BLINDING_TAG: felt252 = 'CONTROLLED_BLINDING_TAG:V1';
+    /// Tag for a controlled note's hiding commitment.
+    pub const CONTROLLED_NOTE_COMMIT_TAG: felt252 = 'CONTROLLED_COMMIT_TAG:V1';
+    /// Tag for `controlled_note_nullifier`.
+    pub const CONTROLLED_NOTE_NULLIFIER_TAG: felt252 = 'CONTROLLED_NULLIFIER_TAG:V1';
+    /// Tag for the exact server-action list authorized by a controlled-note callback.
+    pub const CONTROLLED_NOTE_ACTIONS_TAG: felt252 = 'CONTROLLED_ACTIONS_TAG:V1';
 }
 
 
@@ -255,96 +247,54 @@ pub(crate) fn compute_nullifier(
     )
 }
 
-/// Derives the private note-ID nonce from an escrow note secret.
-pub(crate) fn derive_escrow_note_nonce(secret: felt252) -> felt252 {
-    hash([ESCROW_NOTE_NONCE_TAG, secret].span())
+/// Derives the private note-ID nonce from a controlled note spend key.
+pub(crate) fn derive_controlled_note_nonce(spend_key: felt252) -> felt252 {
+    hash([CONTROLLED_NOTE_NONCE_TAG, spend_key].span())
 }
 
-/// Derives the private amount blinding from an escrow note secret.
-pub(crate) fn derive_escrow_note_blinding(secret: felt252) -> felt252 {
-    hash([ESCROW_NOTE_BLINDING_TAG, secret].span())
+/// Derives the private value blinding from a controlled note spend key.
+pub(crate) fn derive_controlled_note_blinding(spend_key: felt252) -> felt252 {
+    hash([CONTROLLED_NOTE_BLINDING_TAG, spend_key].span())
 }
 
-/// Computes an unlinkable escrow-note ID from a private random secret.
-pub(crate) fn compute_escrow_note_id(
+/// Computes an unlinkable controlled-note ID from a private spend key.
+pub(crate) fn compute_controlled_note_id(
     sender_addr: ContractAddress,
-    contract_address: ContractAddress,
+    controller: ContractAddress,
     policy_commitment: felt252,
     token: ContractAddress,
-    secret: felt252,
+    spend_key: felt252,
 ) -> felt252 {
     hash(
         [
-            ESCROW_NOTE_ID_TAG, sender_addr.into(), contract_address.into(), policy_commitment,
-            token.into(), derive_escrow_note_nonce(secret),
+            CONTROLLED_NOTE_ID_TAG, sender_addr.into(), controller.into(), policy_commitment,
+            token.into(), derive_controlled_note_nonce(spend_key),
         ]
             .span(),
     )
 }
 
-/// Computes the hiding amount commitment stored for an escrow note.
-pub(crate) fn compute_escrow_note_commitment(
+/// Computes the hiding commitment stored for a controlled note.
+pub(crate) fn compute_controlled_note_commitment(
     note_id: felt252,
-    contract_address: ContractAddress,
+    controller: ContractAddress,
     policy_commitment: felt252,
     token: ContractAddress,
     amount: u128,
-    secret: felt252,
+    spend_key: felt252,
 ) -> felt252 {
     hash(
         [
-            ESCROW_NOTE_COMMIT_TAG, note_id, contract_address.into(), policy_commitment,
-            token.into(), amount.into(), derive_escrow_note_blinding(secret),
+            CONTROLLED_NOTE_COMMIT_TAG, note_id, controller.into(), policy_commitment, token.into(),
+            amount.into(), derive_controlled_note_blinding(spend_key),
         ]
             .span(),
     )
 }
 
-/// Computes an unlinkable nullifier from an escrow note's ID and secret.
-pub(crate) fn compute_escrow_note_nullifier(note_id: felt252, secret: felt252) -> felt252 {
-    hash([ESCROW_NOTE_NULLIFIER_TAG, note_id, derive_escrow_note_blinding(secret)].span())
-}
-
-/// Derives the private note-ID nonce from an open escrow note secret.
-pub(crate) fn derive_open_escrow_note_nonce(secret: felt252) -> felt252 {
-    hash([OPEN_ESCROW_NOTE_NONCE_TAG, secret].span())
-}
-
-/// Computes an unlinkable open escrow note ID from a private random secret.
-pub(crate) fn compute_open_escrow_note_id(
-    sender_addr: ContractAddress,
-    contract_address: ContractAddress,
-    policy_commitment: felt252,
-    token: ContractAddress,
-    secret: felt252,
-) -> felt252 {
+/// Computes an unlinkable nullifier from a controlled note's ID and spend key.
+pub(crate) fn compute_controlled_note_nullifier(note_id: felt252, spend_key: felt252) -> felt252 {
     hash(
-        [
-            OPEN_ESCROW_NOTE_ID_TAG, sender_addr.into(), contract_address.into(), policy_commitment,
-            token.into(), derive_open_escrow_note_nonce(secret),
-        ]
-            .span(),
+        [CONTROLLED_NOTE_NULLIFIER_TAG, note_id, derive_controlled_note_blinding(spend_key)].span(),
     )
-}
-
-/// Commits to the secret required to spend an open escrow note.
-pub(crate) fn compute_open_escrow_note_opening_commitment(
-    note_id: felt252,
-    contract_address: ContractAddress,
-    policy_commitment: felt252,
-    token: ContractAddress,
-    secret: felt252,
-) -> felt252 {
-    hash(
-        [
-            OPEN_ESCROW_NOTE_COMMIT_TAG, note_id, contract_address.into(), policy_commitment,
-            token.into(), secret,
-        ]
-            .span(),
-    )
-}
-
-/// Computes an unlinkable nullifier from an open escrow note's ID and secret.
-pub(crate) fn compute_open_escrow_note_nullifier(note_id: felt252, secret: felt252) -> felt252 {
-    hash([OPEN_ESCROW_NOTE_NULLIFIER_TAG, note_id, secret].span())
 }

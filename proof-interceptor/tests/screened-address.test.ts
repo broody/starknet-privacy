@@ -17,7 +17,6 @@ import {
   SWAP_EXECUTOR,
   USER_ADDR,
   computeAndInvokeAction,
-  createOpenEscrowNoteAction,
   createOpenNoteAction,
   depositAction,
   invokeExternalAction,
@@ -140,19 +139,6 @@ describe("getScreenedAddress", () => {
     expect(asked).toEqual([SWAP_EXECUTOR]);
   });
 
-  it("screens the Required callback funding an open escrow note", async () => {
-    const { screened, asked } = await subjectOf(
-      [
-        createOpenEscrowNoteAction(SWAP_EXECUTOR),
-        invokeExternalAction(SWAP_EXECUTOR),
-      ],
-      { [SWAP_EXECUTOR]: "Required" }
-    );
-
-    expect(screened).toEqual({ kind: "one", address: SWAP_EXECUTOR });
-    expect(asked).toEqual([SWAP_EXECUTOR]);
-  });
-
   it("screens nobody for an Exempt invoke target", async () => {
     const { screened } = await subjectOf(
       [createOpenNoteAction(), invokeExternalAction(SWAP_EXECUTOR)],
@@ -168,21 +154,6 @@ describe("getScreenedAddress", () => {
     // user address or nonce fails this.
     const { screened } = await subjectOf(
       [createOpenNoteAction(), computeAndInvokeAction()],
-      { [ANONYMIZER_ADDR]: "Delegated" }
-    );
-
-    expect(screened).toEqual({
-      kind: "one",
-      address: derivedShadowAccount(ANONYMIZER_ADDR),
-    });
-  });
-
-  it("screens the delegated callback for an open-escrow-only interaction", async () => {
-    const { screened } = await subjectOf(
-      [
-        createOpenEscrowNoteAction(ANONYMIZER_ADDR),
-        computeAndInvokeAction(ANONYMIZER_ADDR, []),
-      ],
       { [ANONYMIZER_ADDR]: "Delegated" }
     );
 

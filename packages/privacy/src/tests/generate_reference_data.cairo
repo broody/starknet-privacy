@@ -8,13 +8,11 @@ use core::poseidon::poseidon_hash_span;
 use privacy::actions::{ServerAction, WriteOnceInput};
 use privacy::hashes::domain_separation::*;
 use privacy::hashes::{
-    compute_channel_key, compute_channel_marker, compute_enc_amount_hash,
+    compute_channel_key, compute_channel_marker, compute_controlled_note_commitment,
+    compute_controlled_note_id, compute_controlled_note_nullifier, compute_enc_amount_hash,
     compute_enc_channel_key_hash, compute_enc_private_key_hash, compute_enc_recipient_addr_hash,
-    compute_enc_sender_addr_hash, compute_enc_token_hash, compute_escrow_note_commitment,
-    compute_escrow_note_id, compute_escrow_note_nullifier, compute_note_id, compute_nullifier,
-    compute_open_escrow_note_id, compute_open_escrow_note_nullifier,
-    compute_open_escrow_note_opening_commitment, compute_outgoing_channel_id, compute_subchannel_id,
-    compute_subchannel_marker,
+    compute_enc_sender_addr_hash, compute_enc_token_hash, compute_note_id, compute_nullifier,
+    compute_outgoing_channel_id, compute_subchannel_id, compute_subchannel_marker,
 };
 use privacy::utils::constants::{VIRTUAL_SNOS, VIRTUAL_SNOS0};
 use privacy::utils::{
@@ -42,7 +40,7 @@ const USER_ADDR: felt252 = 0x999;
 const USER_PRIVATE_KEY: felt252 = 0x888;
 const CONTRACT_ADDRESS: felt252 = 0x3333;
 const POLICY_COMMITMENT: felt252 = 0x5555;
-const ESCROW_NOTE_SECRET: felt252 = 0x6666;
+const CONTROLLED_NOTE_SPEND_KEY: felt252 = 0x6666;
 
 fn to_address(addr: felt252) -> ContractAddress {
     addr.try_into().unwrap()
@@ -68,40 +66,23 @@ fn generate_reference_hashes() {
     );
     let note_id = compute_note_id(CHANNEL_KEY, token, INDEX);
     let nullifier = compute_nullifier(CHANNEL_KEY, token, INDEX, SENDER_PRIVATE_KEY);
-    let escrow_note_id = compute_escrow_note_id(
+    let controlled_note_id = compute_controlled_note_id(
         sender_addr: sender,
-        contract_address: to_address(CONTRACT_ADDRESS),
+        controller: to_address(CONTRACT_ADDRESS),
         policy_commitment: POLICY_COMMITMENT,
         token: token,
-        secret: ESCROW_NOTE_SECRET,
+        spend_key: CONTROLLED_NOTE_SPEND_KEY,
     );
-    let escrow_note_commitment = compute_escrow_note_commitment(
-        note_id: escrow_note_id,
-        contract_address: to_address(CONTRACT_ADDRESS),
+    let controlled_note_commitment = compute_controlled_note_commitment(
+        note_id: controlled_note_id,
+        controller: to_address(CONTRACT_ADDRESS),
         policy_commitment: POLICY_COMMITMENT,
         token: token,
         amount: AMOUNT,
-        secret: ESCROW_NOTE_SECRET,
+        spend_key: CONTROLLED_NOTE_SPEND_KEY,
     );
-    let escrow_note_nullifier = compute_escrow_note_nullifier(
-        note_id: escrow_note_id, secret: ESCROW_NOTE_SECRET,
-    );
-    let open_escrow_note_id = compute_open_escrow_note_id(
-        sender_addr: sender,
-        contract_address: to_address(CONTRACT_ADDRESS),
-        policy_commitment: POLICY_COMMITMENT,
-        token: token,
-        secret: ESCROW_NOTE_SECRET,
-    );
-    let open_escrow_note_opening_commitment = compute_open_escrow_note_opening_commitment(
-        note_id: open_escrow_note_id,
-        contract_address: to_address(CONTRACT_ADDRESS),
-        policy_commitment: POLICY_COMMITMENT,
-        token: token,
-        secret: ESCROW_NOTE_SECRET,
-    );
-    let open_escrow_note_nullifier = compute_open_escrow_note_nullifier(
-        note_id: open_escrow_note_id, secret: ESCROW_NOTE_SECRET,
+    let controlled_note_nullifier = compute_controlled_note_nullifier(
+        note_id: controlled_note_id, spend_key: CONTROLLED_NOTE_SPEND_KEY,
     );
 
     // Outgoing channel id
@@ -174,7 +155,7 @@ fn generate_reference_hashes() {
     println!("inputs.userPrivateKey: 0x{:x}", USER_PRIVATE_KEY);
     println!("inputs.contractAddress: 0x{:x}", CONTRACT_ADDRESS);
     println!("inputs.policyCommitment: 0x{:x}", POLICY_COMMITMENT);
-    println!("inputs.escrowNoteSecret: 0x{:x}", ESCROW_NOTE_SECRET);
+    println!("inputs.controlledNoteSpendKey: 0x{:x}", CONTROLLED_NOTE_SPEND_KEY);
 
     // Outputs (computed hashes)
     println!("outputs.channelKey: 0x{:x}", channel_key);
@@ -190,14 +171,9 @@ fn generate_reference_hashes() {
     println!("outputs.encSenderAddrHash: 0x{:x}", enc_sender_addr_hash);
     println!("outputs.encRecipientAddrHash: 0x{:x}", enc_recipient_addr_hash);
     println!("outputs.outgoingChannelId: 0x{:x}", outgoing_channel_id);
-    println!("outputs.escrowNoteId: 0x{:x}", escrow_note_id);
-    println!("outputs.escrowNoteCommitment: 0x{:x}", escrow_note_commitment);
-    println!("outputs.escrowNoteNullifier: 0x{:x}", escrow_note_nullifier);
-    println!("outputs.openEscrowNoteId: 0x{:x}", open_escrow_note_id);
-    println!(
-        "outputs.openEscrowNoteOpeningCommitment: 0x{:x}", open_escrow_note_opening_commitment,
-    );
-    println!("outputs.openEscrowNoteNullifier: 0x{:x}", open_escrow_note_nullifier);
+    println!("outputs.controlledNoteId: 0x{:x}", controlled_note_id);
+    println!("outputs.controlledNoteCommitment: 0x{:x}", controlled_note_commitment);
+    println!("outputs.controlledNoteNullifier: 0x{:x}", controlled_note_nullifier);
 
     // Encryption outputs
     println!("outputs.encSubchannelSalt: 0x{:x}", enc_subchannel.salt);

@@ -196,59 +196,32 @@ export type UseNoteAction = {
   note: Note;
 };
 
-/** Private opening used to create a note controlled by an application contract. */
-export type EscrowNoteCreation = {
-  contractAddress: StarknetAddress;
+/** Private opening used to create a note governed by an application controller. */
+export type ControlledNoteCreation = {
+  controller: StarknetAddress;
   policyCommitment: BigNumberish;
   amount: Amount;
-  /** Secret, non-zero random felt retained by the creator until the note is spent. */
-  secret: BigNumberish;
+  /** Bearer capability retained by the creator or released by a VDF or other trustless policy. */
+  spendKey: BigNumberish;
 };
 
-/** Private opening of an existing escrow note. */
-export type EscrowNoteSpend = {
+/** Private opening of an existing controlled note. */
+export type ControlledNoteSpend = {
   noteId: NoteId;
   /** Policy opening committed at creation and revealed when the note is spent. */
   policyCommitment: BigNumberish;
   amount: Amount;
-  secret: BigNumberish;
+  spendKey: BigNumberish;
   /** Used to bind the local invoke target; the pool verifies it from public note state. */
-  contractAddress: StarknetAddress;
+  controller: StarknetAddress;
 };
 
-export type CreateEscrowNoteAction = EscrowNoteCreation & {
+export type CreateControlledNoteAction = ControlledNoteCreation & {
   token: StarknetAddressBigint;
 };
 
-export type UseEscrowNoteAction = EscrowNoteSpend & {
+export type UseControlledNoteAction = ControlledNoteSpend & {
   /** Token opening committed at creation and revealed when the note is spent. */
-  token: StarknetAddressBigint;
-};
-
-/** Creates a publicly valued note governed and funded by an application contract. */
-export type OpenEscrowNoteCreation = {
-  contractAddress: StarknetAddress;
-  policyCommitment: BigNumberish;
-  /** Secret, non-zero random felt retained by the creator until the note is spent. */
-  secret: BigNumberish;
-};
-
-/** Private opening of an existing publicly valued escrow note. */
-export type OpenEscrowNoteSpend = {
-  noteId: NoteId;
-  /** Public amount, checked against the note stored by the pool. */
-  amount: Amount;
-  secret: BigNumberish;
-  /** Used to bind the local invoke target; the pool verifies it from stored note state. */
-  contractAddress: StarknetAddress;
-};
-
-export type CreateOpenEscrowNoteAction = OpenEscrowNoteCreation & {
-  token: StarknetAddressBigint;
-};
-
-export type UseOpenEscrowNoteAction = OpenEscrowNoteSpend & {
-  /** Used for local balance planning; the pool verifies the token from note state. */
   token: StarknetAddressBigint;
 };
 
@@ -274,10 +247,10 @@ export type InvokeOpenNote = {
   token: StarknetAddressBigint;
 };
 
-export type InvokeOpenEscrowNote = {
+export type InvokeControlledNote = {
   noteId: NoteId;
   token: StarknetAddressBigint;
-  contractAddress: StarknetAddressBigint;
+  controller: StarknetAddressBigint;
   policyCommitment: bigint;
 };
 
@@ -289,7 +262,8 @@ export type InvokeWithdrawal = {
 
 export type InvokeCalldataBuilderArgs = {
   openNotes: InvokeOpenNote[];
-  openEscrowNotes: InvokeOpenEscrowNote[];
+  /** Controlled-note outputs created in this batch. Private openings are deliberately omitted. */
+  controlledNotes: InvokeControlledNote[];
   withdrawals: InvokeWithdrawal[];
   poolAddress: StarknetAddressBigint;
 };
@@ -320,11 +294,9 @@ export type Actions = {
   openTokenChannels?: OpenTokenChannelAction[];
   deposits?: DepositAction[];
   useNotes?: UseNoteAction[];
-  useEscrowNotes?: UseEscrowNoteAction[];
-  useOpenEscrowNotes?: UseOpenEscrowNoteAction[];
+  useControlledNotes?: UseControlledNoteAction[];
   createNotes?: CreateNoteAction[];
-  createEscrowNotes?: CreateEscrowNoteAction[];
-  createOpenEscrowNotes?: CreateOpenEscrowNoteAction[];
+  createControlledNotes?: CreateControlledNoteAction[];
   withdraws?: WithdrawAction[];
   surpluses?: SurplusAction[];
   invoke?: InvokeAction;
@@ -658,17 +630,11 @@ export interface TokenOperationsBuilder {
   inputs(...notes: Note[]): this;
 
   /**
-   * Consume escrow notes as private inputs. The same transaction must call `.invoke()` (or
-   * `.computeAndInvoke()`) with the application contract as its target; authorization failure
-   * reverts the complete transaction.
+   * Consume controlled notes as private inputs. The same transaction must call `.invoke()` (or
+   * `.computeAndInvoke()`) with the controller as its target; authorization failure reverts the
+   * complete transaction.
    */
-  useEscrowNote(...notes: EscrowNoteSpend[]): this;
-
-  /**
-   * Consume publicly valued escrow notes as private inputs. The supplied amount must match public
-   * pool state, and the same transaction must invoke the note's application contract.
-   */
-  useOpenEscrowNote(...notes: OpenEscrowNoteSpend[]): this;
+  useControlledNote(...notes: ControlledNoteSpend[]): this;
 
   /**
    * Deposit this token.
@@ -686,18 +652,11 @@ export interface TokenOperationsBuilder {
   transfer(...outputs: TransferOutput[]): this;
 
   /**
-   * Create notes controlled by an application contract. `secret` is a private opening: generate it
-   * cryptographically, never publish it, and retain it until spend. The same transaction must invoke
-   * the application contract to authorize creation.
+   * Create confidential notes governed by an application controller. `spendKey` is a private bearer
+   * capability and may be bound to a VDF or another trustless release mechanism. The same
+   * transaction must invoke the controller to authorize creation.
    */
-  createEscrowNote(...outputs: EscrowNoteCreation[]): this;
-
-  /**
-   * Create pending, publicly valued escrow notes. The application callback must fund each note
-   * exactly once in the same transaction. The invoke builder receives their derived IDs through
-   * `openEscrowNotes`.
-   */
-  createOpenEscrowNote(...outputs: OpenEscrowNoteCreation[]): this;
+  createControlledNote(...outputs: ControlledNoteCreation[]): this;
 
   /**
    * Set the recipient for any surplus for this token.

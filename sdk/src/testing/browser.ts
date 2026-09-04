@@ -21,12 +21,9 @@ export {
   compute_subchannel_marker,
   compute_note_id,
   compute_nullifier,
-  compute_escrow_note_id,
-  compute_escrow_note_commitment,
-  compute_escrow_note_nullifier,
-  compute_open_escrow_note_id,
-  compute_open_escrow_note_opening_commitment,
-  compute_open_escrow_note_nullifier,
+  compute_controlled_note_id,
+  compute_controlled_note_commitment,
+  compute_controlled_note_nullifier,
   compute_enc_amount_hash,
   compute_enc_token_hash,
   compute_enc_private_key_hash,
@@ -39,8 +36,7 @@ export { TracingRpcProvider, TracedRpcError, type DecodedError } from "./tracing
 export {
   ContractDiscoveryProvider,
   type PoolContractInterface,
-  type EscrowNote,
-  type OpenEscrowNote,
+  type ControlledNote,
 } from "../internal/contract-discovery.js";
 export {
   createConcurrencyProfiler,

@@ -10,20 +10,21 @@ use openzeppelin::interfaces::introspection::{ISRC5SafeDispatcher, ISRC5SafeDisp
 use privacy::actions::{ClientAction, ServerAction, WriteOnceInput};
 use privacy::errors;
 use privacy::errors::internal_errors;
-use privacy::hashes::domain_separation::ESCROW_NOTE_ACTIONS_TAG;
+use privacy::hashes::domain_separation::CONTROLLED_NOTE_ACTIONS_TAG;
 use privacy::hashes::{
     compute_enc_amount_hash, compute_enc_channel_key_hash, compute_enc_private_key_hash,
     compute_enc_recipient_addr_hash, compute_enc_sender_addr_hash, compute_enc_token_hash,
     compute_enc_user_addr_hash,
 };
 use privacy::objects::{
-    EncChannelInfo, EncOutgoingChannelInfo, EncPrivateKey, EncSubchannelInfo, EncUserAddr,
-    EscrowInvokeContext, EscrowInvokeResult, Note, OpenNoteDeposit,
+    ControlledApplyContext, ControlledInvokeResult, ControlledTransition,
+    ControlledValidationContext, EncChannelInfo, EncOutgoingChannelInfo, EncPrivateKey,
+    EncSubchannelInfo, EncUserAddr, Note, OpenNoteDeposit,
 };
 use privacy::snip12::compute_call_set_hash;
 use privacy::utils::constants::{
-    ENTRYPOINT_FAILED, ERR_WRAPPER, HALF_ORDER, LEGACY_VALIDATED, OK_WRAPPER,
-    OPEN_NOTE_PACKED_VALUE, OPEN_NOTE_SALT, TWO_POW_120,
+    CONTROLLED_NOTE_PROTOCOL_VERSION, ENTRYPOINT_FAILED, ERR_WRAPPER, HALF_ORDER, LEGACY_VALIDATED,
+    OK_WRAPPER, OPEN_NOTE_PACKED_VALUE, OPEN_NOTE_SALT, TWO_POW_120,
 };
 use starknet::account::Call;
 use starknet::storage::{StorageAsPointer, StoragePath};
@@ -94,14 +95,19 @@ pub mod constants {
     pub const INVOKE_WITH_COMPUTATION_SELECTOR: felt252 = selector!(
         "privacy_invoke_with_computation",
     );
-    /// Escrow-authorizing counterpart to `privacy_invoke`. The pool prepends a canonical
-    /// [`EscrowInvokeContext`](privacy::objects::EscrowInvokeContext) to the original invoke
-    /// calldata.
-    pub const ESCROW_INVOKE_SELECTOR: felt252 = selector!("privacy_escrow_invoke");
-    /// Escrow-authorizing counterpart to `privacy_invoke_with_computation`.
-    pub const ESCROW_INVOKE_WITH_COMPUTATION_SELECTOR: felt252 = selector!(
-        "privacy_escrow_invoke_with_computation",
+    /// Version of the controlled-note controller protocol.
+    pub const CONTROLLED_NOTE_PROTOCOL_VERSION: felt252 = 'CONTROLLED_NOTE_PROTOCOL_V1';
+    /// Proof-time controller validation over the canonical private transition.
+    pub const CONTROLLED_VALIDATE_SELECTOR: felt252 = selector!(
+        "privacy_validate_controlled_transition",
     );
+    /// Proof-time validation variant that also receives a private identity key and computation
+    /// data.
+    pub const CONTROLLED_VALIDATE_WITH_COMPUTATION_SELECTOR: felt252 = selector!(
+        "privacy_validate_controlled_transition_with_computation",
+    );
+    /// Apply-time controller authorization and state transition.
+    pub const CONTROLLED_APPLY_SELECTOR: felt252 = selector!("privacy_apply_controlled_transition");
     /// STRK fee token address — same on all Starknet networks (mainnet, sepolia, devnet).
     pub const STRK_TOKEN_ADDRESS: ContractAddress =
         0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d
@@ -580,33 +586,62 @@ pub(crate) fn compute_message_hash(
 }
 
 /// Commits to the exact proven server-action list under the current chain and pool.
-pub(crate) fn compute_escrow_note_actions_hash(
+pub(crate) fn compute_controlled_note_actions_hash(
     actions: Span<ServerAction>, chain_id: felt252, pool_address: ContractAddress,
 ) -> felt252 {
-    let mut data = array![ESCROW_NOTE_ACTIONS_TAG, chain_id, pool_address.into()];
+    let mut data = array![CONTROLLED_NOTE_ACTIONS_TAG, chain_id, pool_address.into()];
     actions.serialize(ref data);
     poseidon_hash_span(data.span())
 }
 
-/// Deserializes and authenticates the server-action list in an escrow callback.
-///
-/// The application contract must separately assert that `get_caller_address()` is its expected
-/// privacy pool. This helper binds the canonical action list to that caller and the current chain.
-pub fn validate_escrow_invoke_context(context: EscrowInvokeContext) -> Span<ServerAction> {
-    let EscrowInvokeContext { actions_hash, serialized_actions } = context;
+/// Authenticates the private context supplied to a controlled-note validation callback.
+pub fn validate_controlled_validation_context(
+    context: ControlledValidationContext, expected_pool: ContractAddress,
+) -> ControlledTransition {
+    assert(get_caller_address() == expected_pool, errors::INVALID_CONTROLLED_CONTEXT);
+    assert(
+        context.protocol_version == CONTROLLED_NOTE_PROTOCOL_VERSION,
+        errors::INVALID_CONTROLLED_CONTEXT,
+    );
+    assert(context.pool_address == expected_pool, errors::INVALID_CONTROLLED_CONTEXT);
+    assert(
+        context.chain_id == get_execution_info().tx_info.chain_id,
+        errors::INVALID_CONTROLLED_CONTEXT,
+    );
+    context.transition
+}
+
+/// Deserializes and authenticates the server-action list in a controlled-note apply callback.
+pub fn validate_controlled_apply_context(
+    context: ControlledApplyContext, expected_pool: ContractAddress,
+) -> Span<ServerAction> {
+    assert(get_caller_address() == expected_pool, errors::INVALID_CONTROLLED_CONTEXT);
+    let ControlledApplyContext { protocol_version, actions_hash, serialized_actions } = context;
+    assert(
+        protocol_version == CONTROLLED_NOTE_PROTOCOL_VERSION, errors::INVALID_CONTROLLED_CONTEXT,
+    );
     let mut serialized_actions = serialized_actions;
     let actions: Span<ServerAction> = Serde::deserialize(ref serialized_actions)
-        .expect(errors::INVALID_ESCROW_CONTEXT);
-    assert(serialized_actions.is_empty(), errors::INVALID_ESCROW_CONTEXT);
+        .expect(errors::INVALID_CONTROLLED_CONTEXT);
+    assert(serialized_actions.is_empty(), errors::INVALID_CONTROLLED_CONTEXT);
     assert(
-        actions_hash == compute_escrow_note_actions_hash(
-            :actions,
-            chain_id: get_execution_info().tx_info.chain_id,
-            pool_address: get_caller_address(),
+        actions_hash == compute_controlled_note_actions_hash(
+            :actions, chain_id: get_execution_info().tx_info.chain_id, pool_address: expected_pool,
         ),
-        errors::INVALID_ESCROW_CONTEXT,
+        errors::INVALID_CONTROLLED_CONTEXT,
     );
     actions
+}
+
+/// Decodes the controller's proof-time response into the authorization carried by
+/// `ControlledInvoke`. A fixed ABI prevents return-data framing from becoming application-defined.
+pub(crate) fn deserialize_controlled_authorization(
+    mut return_data: Span<felt252>,
+) -> Span<felt252> {
+    let authorization: Span<felt252> = Serde::deserialize(ref return_data)
+        .expect(errors::INVALID_CONTROLLED_AUTHORIZATION);
+    assert(return_data.is_empty(), errors::INVALID_CONTROLLED_AUTHORIZATION);
+    authorization
 }
 
 /// Asserts that the call originates from the OS.
@@ -643,11 +678,11 @@ pub(crate) fn deserialize_invoke_return_data(
     (deposits, Some(associated_addresses))
 }
 
-/// Deserializes the fixed return shape required from an escrow callback.
-pub(crate) fn deserialize_escrow_invoke_return_data(
+/// Deserializes the fixed return shape required from a controlled-note callback.
+pub(crate) fn deserialize_controlled_invoke_return_data(
     mut return_data: Span<felt252>,
-) -> EscrowInvokeResult {
-    let result: EscrowInvokeResult = Serde::deserialize(ref return_data)
+) -> ControlledInvokeResult {
+    let result: ControlledInvokeResult = Serde::deserialize(ref return_data)
         .expect(errors::INVALID_INVOKE_RETURN_DATA);
     assert(return_data.is_empty(), errors::INVALID_INVOKE_RETURN_DATA);
     result

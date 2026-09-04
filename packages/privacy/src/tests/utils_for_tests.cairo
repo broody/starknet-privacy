@@ -31,9 +31,8 @@ use privacy::interface::{
     IViewsDispatcher, IViewsDispatcherTrait, IViewsSafeDispatcher, IViewsSafeDispatcherTrait,
 };
 use privacy::objects::{
-    EncChannelInfo, EncOutgoingChannelInfo, EncPrivateKey, EncSubchannelInfo, EncUserAddr,
-    EscrowNote, Note, OpenEscrowNote, OpenNoteDeposit, OpenNoteScreeningPolicy, TokenBalances,
-    TokenBalancesTrait,
+    ControlledNote, EncChannelInfo, EncOutgoingChannelInfo, EncPrivateKey, EncSubchannelInfo,
+    EncUserAddr, Note, OpenNoteDeposit, OpenNoteScreeningPolicy, TokenBalances, TokenBalancesTrait,
 };
 use privacy::privacy::Privacy;
 use privacy::privacy::Privacy::{ClientInternalTrait, deploy_for_test as deploy_privacy_for_test};
@@ -2133,12 +2132,8 @@ pub(crate) impl PrivacyCfgImpl of PrivacyCfgTrait {
         self.views.get_proof_validity_blocks()
     }
 
-    fn get_escrow_note(self: @PrivacyCfg, note_id: felt252) -> EscrowNote {
-        self.views.get_escrow_note(:note_id)
-    }
-
-    fn get_open_escrow_note(self: @PrivacyCfg, note_id: felt252) -> OpenEscrowNote {
-        self.views.get_open_escrow_note(:note_id)
+    fn get_controlled_note(self: @PrivacyCfg, note_id: felt252) -> ControlledNote {
+        self.views.get_controlled_note(:note_id)
     }
 
     fn wrap_inputs_into_calls(
@@ -2282,14 +2277,13 @@ fn deposit_depositor_of(actions: Span<ServerAction>) -> Option<ContractAddress> 
     depositor
 }
 
-/// Whether `actions` create open notes or open escrow notes, which the pool requires to be funded
-/// by an Invoke in the same transaction.
+/// Whether `actions` create open notes, which the pool requires to be funded by an Invoke in the
+/// same transaction.
 fn creates_open_notes(actions: Span<ServerAction>) -> bool {
     let mut creates: bool = false;
     for action in actions {
         match *action {
-            ServerAction::EmitOpenNoteCreated(_) |
-            ServerAction::EmitOpenEscrowNoteCreated(_) => {
+            ServerAction::EmitOpenNoteCreated(_) => {
                 creates = true;
                 break;
             },
@@ -2311,6 +2305,10 @@ fn invoke_target_of(actions: Span<ServerAction>) -> Option<ContractAddress> {
             },
             ServerAction::InvokeWithComputation(input) => {
                 target = Some(input.contract_address);
+                break;
+            },
+            ServerAction::ControlledInvoke(input) => {
+                target = Some(input.controller);
                 break;
             },
             _ => {},
@@ -2620,7 +2618,7 @@ pub(crate) fn deploy_mock_compute(
     contract_address
 }
 
-/// Deploys an escrow-note callback target bound to `pool_address`.
+/// Deploys a controlled-note controller bound to `pool_address`.
 pub(crate) fn deploy_mock_note_controller(
     pool_address: ContractAddress, allowed: bool, salt: felt252,
 ) -> ContractAddress {

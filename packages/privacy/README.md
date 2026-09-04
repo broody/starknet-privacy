@@ -16,7 +16,7 @@ User transaction entry point. `__execute__` validates context, compiles `ClientA
 
 ### IViews
 
-Read-only queries: channel/subchannel existence, regular and escrow note lookup, nullifier checks, public key retrieval, fee info.
+Read-only queries: channel/subchannel existence, regular and controlled note lookup, nullifier checks, public key retrieval, fee info.
 
 ### IAdmin
 
@@ -33,83 +33,73 @@ Actions must be ordered by phase. Actions within the same phase can appear in an
 | 2 | `OpenSubchannel` | Open token-specific subchannel |
 | 3 | `Deposit` | Deposit tokens into contract |
 | 4 | `UseNote` | Spend a recipient note (creates nullifier) |
-| 4 | `UseEscrowNote` | Privately open an escrow note (requires escrow-note callback) |
-| 4 | `UseOpenEscrowNote` | Spend a publicly valued escrow note (requires escrow-note callback) |
+| 4 | `UseControlledNote` | Privately open a controlled note (requires controller authorization) |
 | 5 | `CreateEncNote` | Create encrypted note |
 | 5 | `CreateOpenNote` | Create open (unencrypted) note |
-| 5 | `CreateEscrowNote` | Create a private-value escrow note (requires escrow-note callback) |
-| 5 | `CreateOpenEscrowNote` | Create a callback-funded public-value escrow note |
+| 5 | `CreateControlledNote` | Create a private-value controlled note (requires controller authorization) |
 | 6 | `Withdraw` | Withdraw tokens |
 | 7 | `InvokeExternal` | Call external contract (at most once per tx) |
 | 7 | `ComputeAndInvoke` | Compute privately, then call an external contract (at most once per tx) |
 
-## Escrow notes
+## Controlled notes
 
-Escrow notes are contract-governed notes with two explicit value modes:
+`ControlledNote` is a confidential bearer note whose state transition is authorized by an
+application contract. The pool stores only a hiding commitment and the controller address. The
+private opening contains the note ID, policy commitment, token, amount, and `spend_key`; the key
+derives the note's private nonce, commitment blinding, and nullifier.
 
-- `EscrowNote` commits to a private token, amount, policy, and secret-derived blinding. Creation
-  stores and emits only its note ID, governing contract, and hiding commitment. A spend privately
-  opens the commitment, then emits the policy and token without revealing the consumed note ID.
-- `OpenEscrowNote` stores a public amount supplied by the application callback. It is created
-  pending with amount zero and must be funded exactly once in the same transaction. Its note ID,
-  policy, token, and eventual deposit are public and therefore intentionally linkable.
+Every transaction creating or spending a controlled note must contain exactly one invoke-phase
+action targeting the common controller. The pool turns that action into an explicit
+`ControlledInvoke` in two stages:
 
-Both modes require knowledge of a private secret to spend and emit a secret-derived nullifier. For
-private-value notes, observers can group creation and spend transactions by the governing contract,
-but cannot match a particular creation to its spend from pool metadata. A per-note controller or
-unique metadata published by the application recreates that link; use a shared controller and keep
-note-specific openings out of public invoke calldata when an anonymity set is required.
+1. During proven execution, it calls `privacy_validate_controlled_transition` (or
+   `privacy_validate_controlled_transition_with_computation`) with a
+   `ControlledValidationContext`. This canonical, pool-derived context contains the authenticated
+   executor and the complete private value transition: controlled inputs and outputs, ordinary
+   private inputs and outputs, deposits, open-note outputs, and withdrawals. The controller returns
+   opaque authorization data; a rejection prevents proof construction.
+2. During `apply_actions`, it calls `privacy_apply_controlled_transition` with the authorization
+   data, application calldata, and a public `ControlledApplyContext` committing to the exact proven
+   server-action list, chain, and pool. The callback and all pool mutations execute atomically.
 
-Every transaction that creates or spends escrow notes must contain exactly one invoke-phase
-action targeting their application contract. The pool changes the selector to
-`privacy_escrow_invoke` (or `privacy_escrow_invoke_with_computation`) and prepends an
-`EscrowInvokeContext`:
-
-```cairo
-pub struct EscrowInvokeContext {
-    actions_hash: felt252,
-    serialized_actions: Span<felt252>,
-}
-```
-
-The callback's successful return authorizes the complete transaction atomically. Application
-contracts must:
-
-- assert that the caller is the expected privacy pool and read the chain ID from transaction context;
-- validate application policy exposed by the serialized actions. Private `EscrowNote` creation
-  intentionally exposes neither policy nor token, so its callback can authorize only the opaque
-  note creation and any application data deliberately included in invoke calldata;
-- call `validate_escrow_invoke_context` to authenticate and deserialize `serialized_actions`,
-  enforce the permitted asset disposition, and bind any stored authorization to `actions_hash`; and
-- return exactly one serialized `EscrowInvokeResult`:
+Controller contracts should call `validate_controlled_validation_context` during private validation
+and `validate_controlled_apply_context` during apply, passing their configured pool address. These
+helpers authenticate the caller, protocol version, chain, pool, and proof-bound action list. The
+apply callback then inspects the returned actions as required by its policy and returns exactly one
+`ControlledInvokeResult`:
 
 ```cairo
-pub struct EscrowInvokeResult {
+pub struct ControlledInvokeResult {
     open_note_deposits: Span<OpenNoteDeposit>,
-    open_escrow_note_deposits: Span<OpenEscrowNoteDeposit>,
     associated_addresses: Span<ContractAddress>,
 }
 ```
 
-For every `CreateOpenEscrowNote`, the bound contract must return one matching
-`OpenEscrowNoteDeposit` and approve the pool to transfer the public amount. Missing, duplicate, or
-wrong-contract funding reverts the complete transaction. Regular callbacks retain their existing
-return ABI.
+Applications needing callback-funded public outputs create ordinary `CreateOpenNote` outputs and
+return their deposits here. There is deliberately no parallel public/open controlled-note type.
+The `ControlledInvoke` records whether validation came from a plain or computation-based invoke so
+those deposits retain the pool's existing screening semantics.
 
-Only one application contract may appear in a transaction. Escrow notes remain bound to its
-address across upgrades. Applications own their upgrade policy and must preserve the callback ABI
-and policy semantics needed by outstanding notes; they can disable upgrades when immutability is
-required.
+This split supports sealed-bid auctions without committee custody: an application can commit to or
+encrypt the bearer `spend_key` under a VDF policy, validate the private opening and settlement
+disposition during proving, then apply only the public auction state change onchain. The primitive
+is application-neutral; lending, vesting, conditional payments, and other protocols can enforce
+different policies over the same canonical transition.
 
-The private note's policy, token, amount, and `secret` are supplied to the prover at creation and
-again as openings at spend. The policy and token become public in the spend event; the amount and
-secret remain private. Generate secrets with cryptographic randomness, retain them until spend, and
-never place them in public calldata, events, logs, or application state.
+Only one controller may appear in a transaction. Controlled notes remain bound to that contract
+address across upgrades, so applications must preserve callback and policy semantics for
+outstanding notes or use an immutable controller. Generate spend keys with cryptographic
+randomness, retain or encrypt the complete opening until spend, and never put the amount or spend
+key in public calldata, events, logs, or application storage. The pool intentionally provides no
+generic controlled-note discovery because the opening is a private bearer capability; applications
+own its encrypted transport and VDF/key-release lifecycle. Publicly releasing a spend key also
+removes the commitment's secret blinding; that is appropriate for an auction's reveal phase, while
+applications requiring post-settlement amount privacy must keep it confidential.
 
 ## Cryptographic primitives
 
 - All hashes use Poseidon with domain-separation tags (see [`hashes.cairo`](src/hashes.cairo) for formulas)
-- Key derivations: `channel_key`, `channel_marker`, `subchannel_marker`, `subchannel_id`, `outgoing_channel_id`, `note_id`, `nullifier`, escrow note IDs/commitments/nullifiers
+- Key derivations: `channel_key`, `channel_marker`, `subchannel_marker`, `subchannel_id`, `outgoing_channel_id`, `note_id`, `nullifier`, controlled-note IDs/commitments/nullifiers
 - Encryption: ECDH with ephemeral keys; encrypted fields include channel keys, addresses, note amounts, tokens, and private keys
 
 ## Security
@@ -151,11 +141,8 @@ never place them in public calldata, events, logs, or application state.
 | `Deposit` | `Deposit` action |
 | `Withdrawal` | `Withdraw` action |
 | `NoteUsed` | `UseNote` action |
-| `EscrowNoteCreated` | `CreateEscrowNote` action after escrow-note authorization |
-| `EscrowNoteUsed` | `UseEscrowNote` action after escrow-note authorization |
-| `OpenEscrowNoteCreated` | `CreateOpenEscrowNote` action after escrow-note authorization |
-| `OpenEscrowNoteDeposited` | Escrow callback funding an `OpenEscrowNote` |
-| `OpenEscrowNoteUsed` | `UseOpenEscrowNote` action after escrow-note authorization |
+| `ControlledNoteCreated` | `CreateControlledNote` action after controller authorization |
+| `ControlledNoteUsed` | `UseControlledNote` action after controller authorization |
 | `OpenNoteCreated` | `CreateOpenNote` action |
 | `OpenNoteDeposited` | `deposit_to_open_note()` |
 | `AuditorPublicKeySet` | `set_auditor_public_key()` |

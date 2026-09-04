@@ -135,62 +135,110 @@ pub struct OpenNoteDeposit {
     pub amount: u128,
 }
 
-/// A confidential note whose spend policy is enforced by a contract callback.
+/// A confidential bearer note whose transitions are authorized by an application contract.
+///
+/// The private opening is verified by the pool. The controller validates the canonical private
+/// transition during proving and applies the resulting authorization atomically onchain.
 #[derive(Serde, Copy, Drop, PartialEq, Debug, starknet::Store)]
-pub struct EscrowNote {
-    /// Hiding commitment to the token, amount, policy, and secret-derived blinding.
+pub struct ControlledNote {
+    /// Hiding commitment to the token, amount, policy, and spend-key-derived blinding.
     pub note_commitment: felt252,
-    /// Contract that must authorize creation and every spend.
-    pub contract_address: ContractAddress,
+    /// Contract that must validate and authorize creation and every spend.
+    pub controller: ContractAddress,
 }
 
-/// A publicly valued note whose spend policy is enforced by a contract callback.
-///
-/// The note is created with `amount = 0` and must be funded exactly once by its bound application
-/// contract in the same transaction.
-#[derive(Serde, Copy, Drop, PartialEq, Debug, starknet::Store)]
-pub struct OpenEscrowNote {
-    /// Commitment proving knowledge of the private secret used to spend the note.
-    pub opening_commitment: felt252,
-    /// Public amount. Zero only while the note is awaiting its atomic callback deposit.
-    pub amount: u128,
-    /// Contract that must fund the note and authorize every spend.
-    pub contract_address: ContractAddress,
-    /// Application-specific commitment interpreted by the authorizing contract.
+/// Canonical opening for a controlled note. This context exists only inside the proven execution;
+/// it is never included in the public server actions.
+#[derive(Serde, Copy, Drop, PartialEq, Debug)]
+pub struct ControlledNoteOpening {
+    pub note_id: felt252,
     pub policy_commitment: felt252,
-    /// ERC20 token held by the note.
+    pub token: ContractAddress,
+    pub amount: u128,
+    /// Bearer capability required to spend the note. Applications may bind this to a VDF or other
+    /// trustless release mechanism during private validation.
+    pub spend_key: felt252,
+}
+
+/// Canonical value of an ordinary private note consumed beside a controlled transition.
+#[derive(Serde, Copy, Drop, PartialEq, Debug)]
+pub struct PrivateNoteInput {
+    pub note_id: felt252,
+    pub nullifier: felt252,
+    pub token: ContractAddress,
+    pub amount: u128,
+}
+
+/// Canonical private-note output created by the transition.
+#[derive(Serde, Copy, Drop, PartialEq, Debug)]
+pub struct PrivateNoteOutput {
+    pub note_id: felt252,
+    pub recipient: ContractAddress,
+    pub token: ContractAddress,
+    pub amount: u128,
+}
+
+/// Canonical external funding entering the private transaction.
+#[derive(Serde, Copy, Drop, PartialEq, Debug)]
+pub struct ControlledDeposit {
+    pub depositor: ContractAddress,
+    pub token: ContractAddress,
+    pub amount: u128,
+}
+
+/// Canonical zero-valued open note created for an application-funded callback output.
+#[derive(Serde, Copy, Drop, PartialEq, Debug)]
+pub struct OpenNoteOutput {
+    pub note_id: felt252,
+    pub recipient: ContractAddress,
     pub token: ContractAddress,
 }
 
-/// A callback-funded deposit into a pending open escrow note.
+/// Canonical public withdrawal created by the transition.
 #[derive(Serde, Copy, Drop, PartialEq, Debug)]
-pub struct OpenEscrowNoteDeposit {
-    /// Identifier of the pending open escrow note.
-    pub note_id: felt252,
-    /// Public amount transferred from the bound application contract into the pool.
+pub struct ControlledWithdrawal {
+    pub recipient: ContractAddress,
+    pub token: ContractAddress,
     pub amount: u128,
 }
 
-/// Pool-derived context prepended to an escrow callback's calldata.
+/// Private, pool-derived transition passed to the controller during proven execution.
 ///
-/// `actions_hash` commits to the exact proven server-action list. Application contracts should bind
-/// their policy decision to this value whenever output disposition matters.
+/// The controller receives the actual openings and dispositions already checked by the pool, so it
+/// never needs to trust duplicate application inputs or reimplement the pool commitment scheme.
 #[derive(Serde, Copy, Drop, PartialEq, Debug)]
-pub struct EscrowInvokeContext {
+pub struct ControlledTransition {
+    pub controlled_inputs: Span<ControlledNoteOpening>,
+    pub controlled_outputs: Span<ControlledNoteOpening>,
+    pub deposits: Span<ControlledDeposit>,
+    pub private_inputs: Span<PrivateNoteInput>,
+    pub private_outputs: Span<PrivateNoteOutput>,
+    pub open_outputs: Span<OpenNoteOutput>,
+    pub withdrawals: Span<ControlledWithdrawal>,
+}
+
+/// Context for `privacy_validate_controlled_transition`, executed only inside the proof.
+#[derive(Serde, Copy, Drop, PartialEq, Debug)]
+pub struct ControlledValidationContext {
+    pub protocol_version: felt252,
+    pub chain_id: felt252,
+    pub pool_address: ContractAddress,
+    /// Authenticated pool user whose private transaction is being proven.
+    pub executor: ContractAddress,
+    pub transition: ControlledTransition,
+}
+
+/// Public, proof-bound context for `privacy_apply_controlled_transition`.
+#[derive(Serde, Copy, Drop, PartialEq, Debug)]
+pub struct ControlledApplyContext {
+    pub protocol_version: felt252,
     pub actions_hash: felt252,
-    /// Canonical Serde encoding of the exact `Span<ServerAction>` committed by `actions_hash`.
-    /// Contracts can deserialize this to enforce output disposition without a prior state write.
     pub serialized_actions: Span<felt252>,
 }
 
-/// Exact return shape for escrow callbacks.
-///
-/// Regular invoke callbacks retain their existing return ABI. Escrow callbacks can atomically fund
-/// both recipient-owned open notes and contract-governed open escrow notes.
+/// Stable return shape for the apply-time controlled callback.
 #[derive(Serde, Copy, Drop)]
-pub struct EscrowInvokeResult {
+pub struct ControlledInvokeResult {
     pub open_note_deposits: Span<OpenNoteDeposit>,
-    pub open_escrow_note_deposits: Span<OpenEscrowNoteDeposit>,
-    /// Addresses associated with delegated compute-and-invoke deposits. Empty otherwise.
     pub associated_addresses: Span<ContractAddress>,
 }

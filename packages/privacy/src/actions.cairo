@@ -144,54 +144,31 @@ pub(crate) impl CreateOpenNoteInputValid of InputValidation<CreateOpenNoteInput>
     }
 }
 
-/// Input for the `CreateEscrowNote` action.
+/// Input for the `CreateControlledNote` action.
 #[derive(Serde, Copy, Drop, PartialEq, Debug)]
-pub struct CreateEscrowNoteInput {
-    /// The address of the contract controlling spend authority.
-    pub contract_address: ContractAddress,
+pub struct CreateControlledNoteInput {
+    /// The application contract validating and authorizing note transitions.
+    pub controller: ContractAddress,
     /// The application-specific policy commitment.
     pub policy_commitment: felt252,
     /// The token's address.
     pub token: ContractAddress,
     /// The amount the note represents.
     pub amount: u128,
-    /// Private random value used to derive the note ID, amount blinding, and nullifier.
-    pub secret: felt252,
+    /// Private bearer capability used to derive the note ID, blinding, and nullifier.
+    pub spend_key: felt252,
 }
 
-pub(crate) impl CreateEscrowNoteInputValid of InputValidation<CreateEscrowNoteInput> {
-    fn assert_valid(self: CreateEscrowNoteInput) {
-        let CreateEscrowNoteInput {
-            contract_address, policy_commitment, token, amount, secret,
+pub(crate) impl CreateControlledNoteInputValid of InputValidation<CreateControlledNoteInput> {
+    fn assert_valid(self: CreateControlledNoteInput) {
+        let CreateControlledNoteInput {
+            controller, policy_commitment, token, amount, spend_key,
         } = self;
-        assert(contract_address.is_non_zero(), errors::ZERO_CONTRACT_ADDRESS);
+        assert(controller.is_non_zero(), errors::ZERO_CONTRACT_ADDRESS);
         assert(policy_commitment.is_non_zero(), errors::ZERO_POLICY_COMMITMENT);
         assert(token.is_non_zero(), errors::ZERO_TOKEN);
         assert(amount.is_non_zero(), errors::ZERO_AMOUNT);
-        assert(secret.is_non_zero(), errors::ZERO_ESCROW_NOTE_SECRET);
-    }
-}
-
-/// Input for the `CreateOpenEscrowNote` action.
-#[derive(Serde, Copy, Drop, PartialEq, Debug)]
-pub struct CreateOpenEscrowNoteInput {
-    /// The address of the contract that must fund and govern the note.
-    pub contract_address: ContractAddress,
-    /// The application-specific policy commitment.
-    pub policy_commitment: felt252,
-    /// The token that the callback will deposit.
-    pub token: ContractAddress,
-    /// Private random value used to derive the note ID, opening commitment, and nullifier.
-    pub secret: felt252,
-}
-
-pub(crate) impl CreateOpenEscrowNoteInputValid of InputValidation<CreateOpenEscrowNoteInput> {
-    fn assert_valid(self: CreateOpenEscrowNoteInput) {
-        let CreateOpenEscrowNoteInput { contract_address, policy_commitment, token, secret } = self;
-        assert(contract_address.is_non_zero(), errors::ZERO_CONTRACT_ADDRESS);
-        assert(policy_commitment.is_non_zero(), errors::ZERO_POLICY_COMMITMENT);
-        assert(token.is_non_zero(), errors::ZERO_TOKEN);
-        assert(secret.is_non_zero(), errors::ZERO_ESCROW_NOTE_SECRET);
+        assert(spend_key.is_non_zero(), errors::ZERO_CONTROLLED_NOTE_SPEND_KEY);
     }
 }
 
@@ -230,10 +207,10 @@ pub(crate) impl UseNoteInputValid of InputValidation<UseNoteInput> {
     }
 }
 
-/// Input for the `UseEscrowNote` action.
+/// Input for the `UseControlledNote` action.
 #[derive(Serde, Copy, Drop, PartialEq, Debug)]
-pub struct UseEscrowNoteInput {
-    /// Identifier emitted when the escrow note was created.
+pub struct UseControlledNoteInput {
+    /// Identifier emitted when the controlled note was created.
     pub note_id: felt252,
     /// Application policy opening hidden by the note commitment until spend.
     pub policy_commitment: felt252,
@@ -241,39 +218,18 @@ pub struct UseEscrowNoteInput {
     pub token: ContractAddress,
     /// Private amount opening.
     pub amount: u128,
-    /// Private note secret retained by an authorized prover.
-    pub secret: felt252,
+    /// Private bearer capability retained by the prover or released by the note policy.
+    pub spend_key: felt252,
 }
 
-pub(crate) impl UseEscrowNoteInputValid of InputValidation<UseEscrowNoteInput> {
-    fn assert_valid(self: UseEscrowNoteInput) {
-        let UseEscrowNoteInput { note_id, policy_commitment, token, amount, secret } = self;
+pub(crate) impl UseControlledNoteInputValid of InputValidation<UseControlledNoteInput> {
+    fn assert_valid(self: UseControlledNoteInput) {
+        let UseControlledNoteInput { note_id, policy_commitment, token, amount, spend_key } = self;
         assert(note_id.is_non_zero(), errors::ZERO_NOTE_ID);
         assert(policy_commitment.is_non_zero(), errors::ZERO_POLICY_COMMITMENT);
         assert(token.is_non_zero(), errors::ZERO_TOKEN);
         assert(amount.is_non_zero(), errors::ZERO_AMOUNT);
-        assert(secret.is_non_zero(), errors::ZERO_ESCROW_NOTE_SECRET);
-    }
-}
-
-/// Input for the `UseOpenEscrowNote` action.
-#[derive(Serde, Copy, Drop, PartialEq, Debug)]
-pub struct UseOpenEscrowNoteInput {
-    /// Identifier emitted when the open escrow note was created.
-    pub note_id: felt252,
-    /// Public amount expected in the funded note. Used by SDK balance planning and checked by the
-    /// pool against storage.
-    pub amount: u128,
-    /// Private note secret retained by an authorized prover.
-    pub secret: felt252,
-}
-
-pub(crate) impl UseOpenEscrowNoteInputValid of InputValidation<UseOpenEscrowNoteInput> {
-    fn assert_valid(self: UseOpenEscrowNoteInput) {
-        let UseOpenEscrowNoteInput { note_id, amount, secret } = self;
-        assert(note_id.is_non_zero(), errors::ZERO_NOTE_ID);
-        assert(amount.is_non_zero(), errors::ZERO_AMOUNT);
-        assert(secret.is_non_zero(), errors::ZERO_ESCROW_NOTE_SECRET);
+        assert(spend_key.is_non_zero(), errors::ZERO_CONTROLLED_NOTE_SPEND_KEY);
     }
 }
 
@@ -369,14 +325,10 @@ pub enum ClientAction {
     /// Runs `privacy_compute` on the client and forwards its result as a server-side
     /// `InvokeWithComputation` action.
     ComputeAndInvoke: ComputeAndInvokeInput,
-    /// Creates a confidential note locked to an atomically invoked application contract.
-    CreateEscrowNote: CreateEscrowNoteInput,
-    /// Opens and consumes an escrow note, subject to that contract's atomic authorization.
-    UseEscrowNote: UseEscrowNoteInput,
-    /// Creates an empty, publicly valued escrow note that the invoked application must fund.
-    CreateOpenEscrowNote: CreateOpenEscrowNoteInput,
-    /// Opens and consumes a funded open escrow note under its contract's atomic authorization.
-    UseOpenEscrowNote: UseOpenEscrowNoteInput,
+    /// Creates a confidential note governed by an application controller.
+    CreateControlledNote: CreateControlledNoteInput,
+    /// Opens and consumes a controlled note under its controller's policy.
+    UseControlledNote: UseControlledNoteInput,
 }
 
 #[generate_trait]
@@ -399,11 +351,9 @@ pub(crate) impl ClientActionImpl of ClientActionTrait {
             ClientAction::Deposit(_) => Self::DEPOSIT_PHASE,
             ClientAction::CreateEncNote(_) => Self::CREATE_NOTES_PHASE,
             ClientAction::CreateOpenNote(_) => Self::CREATE_NOTES_PHASE,
-            ClientAction::CreateEscrowNote(_) => Self::CREATE_NOTES_PHASE,
-            ClientAction::CreateOpenEscrowNote(_) => Self::CREATE_NOTES_PHASE,
+            ClientAction::CreateControlledNote(_) => Self::CREATE_NOTES_PHASE,
             ClientAction::UseNote(_) => Self::USE_NOTES_PHASE,
-            ClientAction::UseEscrowNote(_) => Self::USE_NOTES_PHASE,
-            ClientAction::UseOpenEscrowNote(_) => Self::USE_NOTES_PHASE,
+            ClientAction::UseControlledNote(_) => Self::USE_NOTES_PHASE,
             ClientAction::Withdraw(_) => Self::WITHDRAW_PHASE,
             ClientAction::InvokeExternal(_) => Self::INVOKE_PHASE,
             ClientAction::ComputeAndInvoke(_) => Self::INVOKE_PHASE,
@@ -475,6 +425,20 @@ pub struct InvokeInput {
     pub calldata: Span<felt252>,
 }
 
+/// A controller invocation whose authorization data was produced by
+/// `privacy_validate_controlled_transition` during the proven execution.
+#[derive(Serde, Copy, Drop, PartialEq, Debug)]
+pub struct ControlledInvokeInput {
+    pub controller: ContractAddress,
+    /// Opaque result returned by the controller's proof-time validation entrypoint.
+    pub authorization_data: Span<felt252>,
+    /// Application calldata supplied by the client and committed by the proof.
+    pub calldata: Span<felt252>,
+    /// Original invoke selector, retained so open-output screening preserves the distinction
+    /// between plain and computation-based interactions.
+    pub source_selector: felt252,
+}
+
 /// An action to be executed by the server.
 #[derive(Serde, Copy, Drop, Debug, PartialEq)]
 pub enum ServerAction {
@@ -507,12 +471,11 @@ pub enum ServerAction {
     /// *NOTE:* The target selector should assert the caller is the privacy contract,
     /// otherwise anyone could invoke it directly and bypass the privacy pool.
     InvokeWithComputation: InvokeInput,
-    /// Emit an escrow-note creation. Appended to preserve all existing discriminants.
-    EmitEscrowNoteCreated: events::EscrowNoteCreated,
-    /// Emit an escrow-note spend. Appended to preserve existing discriminants.
-    EmitEscrowNoteUsed: events::EscrowNoteUsed,
-    /// Emit a pending open escrow-note creation. Appended to preserve existing discriminants.
-    EmitOpenEscrowNoteCreated: events::OpenEscrowNoteCreated,
-    /// Emit an open escrow-note spend. Appended to preserve existing discriminants.
-    EmitOpenEscrowNoteUsed: events::OpenEscrowNoteUsed,
+    /// Explicit controller authorization and apply-time invocation. Appended to preserve all
+    /// server-action discriminants deployed before controlled notes.
+    ControlledInvoke: ControlledInvokeInput,
+    /// Emit a controlled-note creation.
+    EmitControlledNoteCreated: events::ControlledNoteCreated,
+    /// Emit a controlled-note spend.
+    EmitControlledNoteUsed: events::ControlledNoteUsed,
 }

@@ -249,10 +249,10 @@ export const PrivacyPoolABI = [
   },
   {
     "type": "struct",
-    "name": "privacy::actions::CreateEscrowNoteInput",
+    "name": "privacy::actions::CreateControlledNoteInput",
     "members": [
       {
-        "name": "contract_address",
+        "name": "controller",
         "type": "core::starknet::contract_address::ContractAddress"
       },
       {
@@ -268,14 +268,14 @@ export const PrivacyPoolABI = [
         "type": "core::integer::u128"
       },
       {
-        "name": "secret",
+        "name": "spend_key",
         "type": "core::felt252"
       }
     ]
   },
   {
     "type": "struct",
-    "name": "privacy::actions::UseEscrowNoteInput",
+    "name": "privacy::actions::UseControlledNoteInput",
     "members": [
       {
         "name": "note_id",
@@ -294,47 +294,7 @@ export const PrivacyPoolABI = [
         "type": "core::integer::u128"
       },
       {
-        "name": "secret",
-        "type": "core::felt252"
-      }
-    ]
-  },
-  {
-    "type": "struct",
-    "name": "privacy::actions::CreateOpenEscrowNoteInput",
-    "members": [
-      {
-        "name": "contract_address",
-        "type": "core::starknet::contract_address::ContractAddress"
-      },
-      {
-        "name": "policy_commitment",
-        "type": "core::felt252"
-      },
-      {
-        "name": "token",
-        "type": "core::starknet::contract_address::ContractAddress"
-      },
-      {
-        "name": "secret",
-        "type": "core::felt252"
-      }
-    ]
-  },
-  {
-    "type": "struct",
-    "name": "privacy::actions::UseOpenEscrowNoteInput",
-    "members": [
-      {
-        "name": "note_id",
-        "type": "core::felt252"
-      },
-      {
-        "name": "amount",
-        "type": "core::integer::u128"
-      },
-      {
-        "name": "secret",
+        "name": "spend_key",
         "type": "core::felt252"
       }
     ]
@@ -384,20 +344,12 @@ export const PrivacyPoolABI = [
         "type": "privacy::actions::ComputeAndInvokeInput"
       },
       {
-        "name": "CreateEscrowNote",
-        "type": "privacy::actions::CreateEscrowNoteInput"
+        "name": "CreateControlledNote",
+        "type": "privacy::actions::CreateControlledNoteInput"
       },
       {
-        "name": "UseEscrowNote",
-        "type": "privacy::actions::UseEscrowNoteInput"
-      },
-      {
-        "name": "CreateOpenEscrowNote",
-        "type": "privacy::actions::CreateOpenEscrowNoteInput"
-      },
-      {
-        "name": "UseOpenEscrowNote",
-        "type": "privacy::actions::UseOpenEscrowNoteInput"
+        "name": "UseControlledNote",
+        "type": "privacy::actions::UseControlledNoteInput"
       }
     ]
   },
@@ -645,14 +597,36 @@ export const PrivacyPoolABI = [
   },
   {
     "type": "struct",
-    "name": "privacy::events::EscrowNoteCreated",
+    "name": "privacy::actions::ControlledInvokeInput",
+    "members": [
+      {
+        "name": "controller",
+        "type": "core::starknet::contract_address::ContractAddress"
+      },
+      {
+        "name": "authorization_data",
+        "type": "core::array::Span::<core::felt252>"
+      },
+      {
+        "name": "calldata",
+        "type": "core::array::Span::<core::felt252>"
+      },
+      {
+        "name": "source_selector",
+        "type": "core::felt252"
+      }
+    ]
+  },
+  {
+    "type": "struct",
+    "name": "privacy::events::ControlledNoteCreated",
     "members": [
       {
         "name": "note_id",
         "type": "core::felt252"
       },
       {
-        "name": "contract_address",
+        "name": "controller",
         "type": "core::starknet::contract_address::ContractAddress"
       },
       {
@@ -663,14 +637,14 @@ export const PrivacyPoolABI = [
   },
   {
     "type": "struct",
-    "name": "privacy::events::EscrowNoteUsed",
+    "name": "privacy::events::ControlledNoteUsed",
     "members": [
       {
         "name": "nullifier",
         "type": "core::felt252"
       },
       {
-        "name": "contract_address",
+        "name": "controller",
         "type": "core::starknet::contract_address::ContractAddress"
       },
       {
@@ -680,58 +654,6 @@ export const PrivacyPoolABI = [
       {
         "name": "token",
         "type": "core::starknet::contract_address::ContractAddress"
-      }
-    ]
-  },
-  {
-    "type": "struct",
-    "name": "privacy::events::OpenEscrowNoteCreated",
-    "members": [
-      {
-        "name": "note_id",
-        "type": "core::felt252"
-      },
-      {
-        "name": "contract_address",
-        "type": "core::starknet::contract_address::ContractAddress"
-      },
-      {
-        "name": "policy_commitment",
-        "type": "core::felt252"
-      },
-      {
-        "name": "token",
-        "type": "core::starknet::contract_address::ContractAddress"
-      },
-      {
-        "name": "opening_commitment",
-        "type": "core::felt252"
-      }
-    ]
-  },
-  {
-    "type": "struct",
-    "name": "privacy::events::OpenEscrowNoteUsed",
-    "members": [
-      {
-        "name": "nullifier",
-        "type": "core::felt252"
-      },
-      {
-        "name": "contract_address",
-        "type": "core::starknet::contract_address::ContractAddress"
-      },
-      {
-        "name": "policy_commitment",
-        "type": "core::felt252"
-      },
-      {
-        "name": "token",
-        "type": "core::starknet::contract_address::ContractAddress"
-      },
-      {
-        "name": "amount",
-        "type": "core::integer::u128"
       }
     ]
   },
@@ -788,20 +710,16 @@ export const PrivacyPoolABI = [
         "type": "privacy::actions::InvokeInput"
       },
       {
-        "name": "EmitEscrowNoteCreated",
-        "type": "privacy::events::EscrowNoteCreated"
+        "name": "ControlledInvoke",
+        "type": "privacy::actions::ControlledInvokeInput"
       },
       {
-        "name": "EmitEscrowNoteUsed",
-        "type": "privacy::events::EscrowNoteUsed"
+        "name": "EmitControlledNoteCreated",
+        "type": "privacy::events::ControlledNoteCreated"
       },
       {
-        "name": "EmitOpenEscrowNoteCreated",
-        "type": "privacy::events::OpenEscrowNoteCreated"
-      },
-      {
-        "name": "EmitOpenEscrowNoteUsed",
-        "type": "privacy::events::OpenEscrowNoteUsed"
+        "name": "EmitControlledNoteUsed",
+        "type": "privacy::events::ControlledNoteUsed"
       }
     ]
   },
@@ -1011,40 +929,14 @@ export const PrivacyPoolABI = [
   },
   {
     "type": "struct",
-    "name": "privacy::objects::EscrowNote",
+    "name": "privacy::objects::ControlledNote",
     "members": [
       {
         "name": "note_commitment",
         "type": "core::felt252"
       },
       {
-        "name": "contract_address",
-        "type": "core::starknet::contract_address::ContractAddress"
-      }
-    ]
-  },
-  {
-    "type": "struct",
-    "name": "privacy::objects::OpenEscrowNote",
-    "members": [
-      {
-        "name": "opening_commitment",
-        "type": "core::felt252"
-      },
-      {
-        "name": "amount",
-        "type": "core::integer::u128"
-      },
-      {
-        "name": "contract_address",
-        "type": "core::starknet::contract_address::ContractAddress"
-      },
-      {
-        "name": "policy_commitment",
-        "type": "core::felt252"
-      },
-      {
-        "name": "token",
+        "name": "controller",
         "type": "core::starknet::contract_address::ContractAddress"
       }
     ]
@@ -1189,7 +1081,7 @@ export const PrivacyPoolABI = [
       },
       {
         "type": "function",
-        "name": "get_escrow_note",
+        "name": "get_controlled_note",
         "inputs": [
           {
             "name": "note_id",
@@ -1198,23 +1090,7 @@ export const PrivacyPoolABI = [
         ],
         "outputs": [
           {
-            "type": "privacy::objects::EscrowNote"
-          }
-        ],
-        "state_mutability": "view"
-      },
-      {
-        "type": "function",
-        "name": "get_open_escrow_note",
-        "inputs": [
-          {
-            "name": "note_id",
-            "type": "core::felt252"
-          }
-        ],
-        "outputs": [
-          {
-            "type": "privacy::objects::OpenEscrowNote"
+            "type": "privacy::objects::ControlledNote"
           }
         ],
         "state_mutability": "view"
@@ -2243,7 +2119,7 @@ export const PrivacyPoolABI = [
   },
   {
     "type": "event",
-    "name": "privacy::events::EscrowNoteCreated",
+    "name": "privacy::events::ControlledNoteCreated",
     "kind": "struct",
     "members": [
       {
@@ -2252,7 +2128,7 @@ export const PrivacyPoolABI = [
         "kind": "key"
       },
       {
-        "name": "contract_address",
+        "name": "controller",
         "type": "core::starknet::contract_address::ContractAddress",
         "kind": "key"
       },
@@ -2265,7 +2141,7 @@ export const PrivacyPoolABI = [
   },
   {
     "type": "event",
-    "name": "privacy::events::EscrowNoteUsed",
+    "name": "privacy::events::ControlledNoteUsed",
     "kind": "struct",
     "members": [
       {
@@ -2274,7 +2150,7 @@ export const PrivacyPoolABI = [
         "kind": "key"
       },
       {
-        "name": "contract_address",
+        "name": "controller",
         "type": "core::starknet::contract_address::ContractAddress",
         "kind": "key"
       },
@@ -2286,97 +2162,6 @@ export const PrivacyPoolABI = [
       {
         "name": "token",
         "type": "core::starknet::contract_address::ContractAddress",
-        "kind": "data"
-      }
-    ]
-  },
-  {
-    "type": "event",
-    "name": "privacy::events::OpenEscrowNoteCreated",
-    "kind": "struct",
-    "members": [
-      {
-        "name": "note_id",
-        "type": "core::felt252",
-        "kind": "key"
-      },
-      {
-        "name": "contract_address",
-        "type": "core::starknet::contract_address::ContractAddress",
-        "kind": "key"
-      },
-      {
-        "name": "policy_commitment",
-        "type": "core::felt252",
-        "kind": "key"
-      },
-      {
-        "name": "token",
-        "type": "core::starknet::contract_address::ContractAddress",
-        "kind": "data"
-      },
-      {
-        "name": "opening_commitment",
-        "type": "core::felt252",
-        "kind": "data"
-      }
-    ]
-  },
-  {
-    "type": "event",
-    "name": "privacy::events::OpenEscrowNoteDeposited",
-    "kind": "struct",
-    "members": [
-      {
-        "name": "note_id",
-        "type": "core::felt252",
-        "kind": "key"
-      },
-      {
-        "name": "contract_address",
-        "type": "core::starknet::contract_address::ContractAddress",
-        "kind": "key"
-      },
-      {
-        "name": "token",
-        "type": "core::starknet::contract_address::ContractAddress",
-        "kind": "data"
-      },
-      {
-        "name": "amount",
-        "type": "core::integer::u128",
-        "kind": "data"
-      }
-    ]
-  },
-  {
-    "type": "event",
-    "name": "privacy::events::OpenEscrowNoteUsed",
-    "kind": "struct",
-    "members": [
-      {
-        "name": "nullifier",
-        "type": "core::felt252",
-        "kind": "key"
-      },
-      {
-        "name": "contract_address",
-        "type": "core::starknet::contract_address::ContractAddress",
-        "kind": "key"
-      },
-      {
-        "name": "policy_commitment",
-        "type": "core::felt252",
-        "kind": "key"
-      },
-      {
-        "name": "token",
-        "type": "core::starknet::contract_address::ContractAddress",
-        "kind": "data"
-      },
-      {
-        "name": "amount",
-        "type": "core::integer::u128",
         "kind": "data"
       }
     ]
@@ -2520,28 +2305,13 @@ export const PrivacyPoolABI = [
         "kind": "nested"
       },
       {
-        "name": "EscrowNoteCreated",
-        "type": "privacy::events::EscrowNoteCreated",
+        "name": "ControlledNoteCreated",
+        "type": "privacy::events::ControlledNoteCreated",
         "kind": "nested"
       },
       {
-        "name": "EscrowNoteUsed",
-        "type": "privacy::events::EscrowNoteUsed",
-        "kind": "nested"
-      },
-      {
-        "name": "OpenEscrowNoteCreated",
-        "type": "privacy::events::OpenEscrowNoteCreated",
-        "kind": "nested"
-      },
-      {
-        "name": "OpenEscrowNoteDeposited",
-        "type": "privacy::events::OpenEscrowNoteDeposited",
-        "kind": "nested"
-      },
-      {
-        "name": "OpenEscrowNoteUsed",
-        "type": "privacy::events::OpenEscrowNoteUsed",
+        "name": "ControlledNoteUsed",
+        "type": "privacy::events::ControlledNoteUsed",
         "kind": "nested"
       },
       {
