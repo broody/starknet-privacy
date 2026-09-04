@@ -196,6 +196,35 @@ export type UseNoteAction = {
   note: Note;
 };
 
+/** Private opening used to create a note governed by an application controller. */
+export type ControlledNoteCreation = {
+  controller: StarknetAddress;
+  policyCommitment: BigNumberish;
+  amount: Amount;
+  /** Bearer capability retained by the creator or released by a VDF or other trustless policy. */
+  spendKey: BigNumberish;
+};
+
+/** Private opening of an existing controlled note. */
+export type ControlledNoteSpend = {
+  noteId: NoteId;
+  /** Policy opening committed at creation and revealed when the note is spent. */
+  policyCommitment: BigNumberish;
+  amount: Amount;
+  spendKey: BigNumberish;
+  /** Used to bind the local invoke target; the pool verifies it from public note state. */
+  controller: StarknetAddress;
+};
+
+export type CreateControlledNoteAction = ControlledNoteCreation & {
+  token: StarknetAddressBigint;
+};
+
+export type UseControlledNoteAction = ControlledNoteSpend & {
+  /** Token opening committed at creation and revealed when the note is spent. */
+  token: StarknetAddressBigint;
+};
+
 export type CreateNoteAction = {
   recipient: StarknetAddressBigint;
   token: StarknetAddressBigint;
@@ -218,6 +247,13 @@ export type InvokeOpenNote = {
   token: StarknetAddressBigint;
 };
 
+export type InvokeControlledNote = {
+  noteId: NoteId;
+  token: StarknetAddressBigint;
+  controller: StarknetAddressBigint;
+  policyCommitment: bigint;
+};
+
 export type InvokeWithdrawal = {
   recipient: StarknetAddressBigint;
   token: StarknetAddressBigint;
@@ -226,6 +262,8 @@ export type InvokeWithdrawal = {
 
 export type InvokeCalldataBuilderArgs = {
   openNotes: InvokeOpenNote[];
+  /** Controlled-note outputs created in this batch. Private openings are deliberately omitted. */
+  controlledNotes: InvokeControlledNote[];
   withdrawals: InvokeWithdrawal[];
   poolAddress: StarknetAddressBigint;
 };
@@ -256,7 +294,9 @@ export type Actions = {
   openTokenChannels?: OpenTokenChannelAction[];
   deposits?: DepositAction[];
   useNotes?: UseNoteAction[];
+  useControlledNotes?: UseControlledNoteAction[];
   createNotes?: CreateNoteAction[];
+  createControlledNotes?: CreateControlledNoteAction[];
   withdraws?: WithdrawAction[];
   surpluses?: SurplusAction[];
   invoke?: InvokeAction;
@@ -590,6 +630,13 @@ export interface TokenOperationsBuilder {
   inputs(...notes: Note[]): this;
 
   /**
+   * Consume controlled notes as private inputs. The same transaction must call `.invoke()` (or
+   * `.computeAndInvoke()`) with the controller as its target; authorization failure reverts the
+   * complete transaction.
+   */
+  useControlledNote(...notes: ControlledNoteSpend[]): this;
+
+  /**
    * Deposit this token.
    * @param inputs Array of inputs to deposit. Each input can be a recipient address or a note id.
    */
@@ -603,6 +650,13 @@ export interface TokenOperationsBuilder {
    * Context for each recipient is resolved from registry or discovery.
    */
   transfer(...outputs: TransferOutput[]): this;
+
+  /**
+   * Create confidential notes governed by an application controller. `spendKey` is a private bearer
+   * capability and may be bound to a VDF or another trustless release mechanism. The same
+   * transaction must invoke the controller to authorize creation.
+   */
+  createControlledNote(...outputs: ControlledNoteCreation[]): this;
 
   /**
    * Set the recipient for any surplus for this token.

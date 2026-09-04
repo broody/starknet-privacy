@@ -30,6 +30,7 @@ const TYPE_MAP: Record<string, string> = {
   "core::integer::u32": "number",
   "core::starknet::contract_address::ContractAddress": "StarknetAddressBigint",
   "core::bool": "boolean",
+  "core::array::Span::<core::felt252>": "bigint[]",
 };
 
 const mapType = (abiType: string): string => {

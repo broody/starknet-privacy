@@ -2,9 +2,10 @@ use core::num::traits::Zero;
 use core::poseidon::poseidon_hash_span;
 use openzeppelin::security::ReentrancyGuardComponent::Errors as ReentrancyGuardErrors;
 use privacy::actions::{
-    AppendInput, ClientAction, ComputeAndInvokeInput, CreateEncNoteInput, CreateOpenNoteInput,
-    DepositInput, InvokeExternalInput, InvokeInput, OpenChannelInput, OpenSubchannelInput,
-    ServerAction, SetViewingKeyInput, TransferFromInput, TransferToInput, UseNoteInput,
+    AppendInput, ClientAction, ComputeAndInvokeInput, ControlledInvokeInput,
+    CreateControlledNoteInput, CreateEncNoteInput, CreateOpenNoteInput, DepositInput,
+    InvokeExternalInput, InvokeInput, OpenChannelInput, OpenSubchannelInput, ServerAction,
+    SetViewingKeyInput, TransferFromInput, TransferToInput, UseControlledNoteInput, UseNoteInput,
     WithdrawInput,
 };
 use privacy::hashes::{
@@ -27,7 +28,7 @@ use privacy::tests::utils_for_tests::{
     deploy_mock_return_garbage, deploy_mock_stark_account,
 };
 use privacy::utils::constants::{
-    ERR_WRAPPER, ESTIMATION_BASE_TX_VERSION, LEGACY_VALIDATED, OPEN_NOTE_SALT, TWO_POW_120, TX_V3,
+    ERR_WRAPPER, ESTIMATION_BASE_TX_VERSION, OPEN_NOTE_SALT, TWO_POW_120, TX_V3,
 };
 use privacy::utils::{
     compute_message_hash, decode_note_amount, encrypt_channel_info, encrypt_user_addr,
@@ -53,6 +54,111 @@ use starkware_utils_testing::test_utils::{
     TokenHelperTrait, assert_expected_event_emitted, assert_panic_with_error,
     assert_panic_with_felt_error,
 };
+
+fn client_action_variant(action: ClientAction) -> felt252 {
+    let mut serialized = array![];
+    action.serialize(ref serialized);
+    *serialized[0]
+}
+
+fn server_action_variant(action: ServerAction) -> felt252 {
+    let mut serialized = array![];
+    action.serialize(ref serialized);
+    *serialized[0]
+}
+
+#[test]
+fn test_action_enum_discriminants_are_append_only() {
+    let invoke = InvokeInput { contract_address: 1.try_into().unwrap(), calldata: [].span() };
+    assert_eq!(
+        client_action_variant(
+            ClientAction::InvokeExternal(
+                InvokeExternalInput {
+                    contract_address: 1.try_into().unwrap(), calldata: [].span(),
+                },
+            ),
+        ),
+        8,
+    );
+    assert_eq!(
+        client_action_variant(
+            ClientAction::ComputeAndInvoke(
+                ComputeAndInvokeInput {
+                    contract_address: 1.try_into().unwrap(),
+                    compute_additional_data: [].span(),
+                    invoke_additional_data: [].span(),
+                },
+            ),
+        ),
+        9,
+    );
+    assert_eq!(
+        client_action_variant(
+            ClientAction::CreateControlledNote(
+                CreateControlledNoteInput {
+                    controller: 1.try_into().unwrap(),
+                    policy_commitment: 1,
+                    token: 1.try_into().unwrap(),
+                    amount: 1,
+                    spend_key: 1,
+                },
+            ),
+        ),
+        10,
+    );
+    assert_eq!(
+        client_action_variant(
+            ClientAction::UseControlledNote(
+                UseControlledNoteInput {
+                    note_id: 1,
+                    policy_commitment: 1,
+                    token: 1.try_into().unwrap(),
+                    amount: 1,
+                    spend_key: 1,
+                },
+            ),
+        ),
+        11,
+    );
+    assert_eq!(server_action_variant(ServerAction::Invoke(invoke)), 10);
+    assert_eq!(server_action_variant(ServerAction::InvokeWithComputation(invoke)), 11);
+    assert_eq!(
+        server_action_variant(
+            ServerAction::ControlledInvoke(
+                ControlledInvokeInput {
+                    controller: 1.try_into().unwrap(),
+                    authorization_data: [].span(),
+                    calldata: [].span(),
+                    source_selector: 1,
+                },
+            ),
+        ),
+        12,
+    );
+    assert_eq!(
+        server_action_variant(
+            ServerAction::EmitControlledNoteCreated(
+                events::ControlledNoteCreated {
+                    note_id: 1, controller: 1.try_into().unwrap(), note_commitment: 1,
+                },
+            ),
+        ),
+        13,
+    );
+    assert_eq!(
+        server_action_variant(
+            ServerAction::EmitControlledNoteUsed(
+                events::ControlledNoteUsed {
+                    nullifier: 1,
+                    controller: 1.try_into().unwrap(),
+                    policy_commitment: 1,
+                    token: 1.try_into().unwrap(),
+                },
+            ),
+        ),
+        14,
+    );
+}
 
 #[test]
 fn test_validate() {

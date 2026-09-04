@@ -37,6 +37,18 @@ pub mod domain_separation {
     pub const OUTGOING_CHANNEL_ID_TAG: felt252 = 'OUTGOING_CHANNEL_ID_TAG:V1';
     /// Tag for `identity_key`.
     pub const IDENTITY_KEY_TAG: felt252 = 'IDENTITY_KEY_TAG:V1';
+    /// Tag for a controlled note ID.
+    pub const CONTROLLED_NOTE_ID_TAG: felt252 = 'CONTROLLED_NOTE_ID_TAG:V1';
+    /// Tag for deriving a controlled note's private ID nonce from its spend key.
+    pub const CONTROLLED_NOTE_NONCE_TAG: felt252 = 'CONTROLLED_NOTE_NONCE_TAG:V1';
+    /// Tag for deriving a controlled note's private value blinding from its spend key.
+    pub const CONTROLLED_NOTE_BLINDING_TAG: felt252 = 'CONTROLLED_BLINDING_TAG:V1';
+    /// Tag for a controlled note's hiding commitment.
+    pub const CONTROLLED_NOTE_COMMIT_TAG: felt252 = 'CONTROLLED_COMMIT_TAG:V1';
+    /// Tag for `controlled_note_nullifier`.
+    pub const CONTROLLED_NOTE_NULLIFIER_TAG: felt252 = 'CONTROLLED_NULLIFIER_TAG:V1';
+    /// Tag for the exact server-action list authorized by a controlled-note callback.
+    pub const CONTROLLED_NOTE_ACTIONS_TAG: felt252 = 'CONTROLLED_ACTIONS_TAG:V1';
 }
 
 
@@ -232,5 +244,57 @@ pub(crate) fn compute_nullifier(
     hash(
         [NULLIFIER_TAG, channel_key, token.into(), index.into(), Zero::zero(), owner_private_key]
             .span(),
+    )
+}
+
+/// Derives the private note-ID nonce from a controlled note spend key.
+pub(crate) fn derive_controlled_note_nonce(spend_key: felt252) -> felt252 {
+    hash([CONTROLLED_NOTE_NONCE_TAG, spend_key].span())
+}
+
+/// Derives the private value blinding from a controlled note spend key.
+pub(crate) fn derive_controlled_note_blinding(spend_key: felt252) -> felt252 {
+    hash([CONTROLLED_NOTE_BLINDING_TAG, spend_key].span())
+}
+
+/// Computes an unlinkable controlled-note ID from a private spend key.
+pub(crate) fn compute_controlled_note_id(
+    sender_addr: ContractAddress,
+    controller: ContractAddress,
+    policy_commitment: felt252,
+    token: ContractAddress,
+    spend_key: felt252,
+) -> felt252 {
+    hash(
+        [
+            CONTROLLED_NOTE_ID_TAG, sender_addr.into(), controller.into(), policy_commitment,
+            token.into(), derive_controlled_note_nonce(spend_key),
+        ]
+            .span(),
+    )
+}
+
+/// Computes the hiding commitment stored for a controlled note.
+pub(crate) fn compute_controlled_note_commitment(
+    note_id: felt252,
+    controller: ContractAddress,
+    policy_commitment: felt252,
+    token: ContractAddress,
+    amount: u128,
+    spend_key: felt252,
+) -> felt252 {
+    hash(
+        [
+            CONTROLLED_NOTE_COMMIT_TAG, note_id, controller.into(), policy_commitment, token.into(),
+            amount.into(), derive_controlled_note_blinding(spend_key),
+        ]
+            .span(),
+    )
+}
+
+/// Computes an unlinkable nullifier from a controlled note's ID and spend key.
+pub(crate) fn compute_controlled_note_nullifier(note_id: felt252, spend_key: felt252) -> felt252 {
+    hash(
+        [CONTROLLED_NOTE_NULLIFIER_TAG, note_id, derive_controlled_note_blinding(spend_key)].span(),
     )
 }

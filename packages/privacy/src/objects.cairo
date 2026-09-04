@@ -134,3 +134,111 @@ pub struct OpenNoteDeposit {
     /// The amount of tokens to deposit.
     pub amount: u128,
 }
+
+/// A confidential bearer note whose transitions are authorized by an application contract.
+///
+/// The private opening is verified by the pool. The controller validates the canonical private
+/// transition during proving and applies the resulting authorization atomically onchain.
+#[derive(Serde, Copy, Drop, PartialEq, Debug, starknet::Store)]
+pub struct ControlledNote {
+    /// Hiding commitment to the token, amount, policy, and spend-key-derived blinding.
+    pub note_commitment: felt252,
+    /// Contract that must validate and authorize creation and every spend.
+    pub controller: ContractAddress,
+}
+
+/// Canonical opening for a controlled note. This context exists only inside the proven execution;
+/// it is never included in the public server actions.
+#[derive(Serde, Copy, Drop, PartialEq, Debug)]
+pub struct ControlledNoteOpening {
+    pub note_id: felt252,
+    pub policy_commitment: felt252,
+    pub token: ContractAddress,
+    pub amount: u128,
+    /// Bearer capability required to spend the note. Applications may bind this to a VDF or other
+    /// trustless release mechanism during private validation.
+    pub spend_key: felt252,
+}
+
+/// Canonical value of an ordinary private note consumed beside a controlled transition.
+#[derive(Serde, Copy, Drop, PartialEq, Debug)]
+pub struct PrivateNoteInput {
+    pub note_id: felt252,
+    pub nullifier: felt252,
+    pub token: ContractAddress,
+    pub amount: u128,
+}
+
+/// Canonical private-note output created by the transition.
+#[derive(Serde, Copy, Drop, PartialEq, Debug)]
+pub struct PrivateNoteOutput {
+    pub note_id: felt252,
+    pub recipient: ContractAddress,
+    pub token: ContractAddress,
+    pub amount: u128,
+}
+
+/// Canonical external funding entering the private transaction.
+#[derive(Serde, Copy, Drop, PartialEq, Debug)]
+pub struct ControlledDeposit {
+    pub depositor: ContractAddress,
+    pub token: ContractAddress,
+    pub amount: u128,
+}
+
+/// Canonical zero-valued open note created for an application-funded callback output.
+#[derive(Serde, Copy, Drop, PartialEq, Debug)]
+pub struct OpenNoteOutput {
+    pub note_id: felt252,
+    pub recipient: ContractAddress,
+    pub token: ContractAddress,
+}
+
+/// Canonical public withdrawal created by the transition.
+#[derive(Serde, Copy, Drop, PartialEq, Debug)]
+pub struct ControlledWithdrawal {
+    pub recipient: ContractAddress,
+    pub token: ContractAddress,
+    pub amount: u128,
+}
+
+/// Private, pool-derived transition passed to the controller during proven execution.
+///
+/// The controller receives the actual openings and dispositions already checked by the pool, so it
+/// never needs to trust duplicate application inputs or reimplement the pool commitment scheme.
+#[derive(Serde, Copy, Drop, PartialEq, Debug)]
+pub struct ControlledTransition {
+    pub controlled_inputs: Span<ControlledNoteOpening>,
+    pub controlled_outputs: Span<ControlledNoteOpening>,
+    pub deposits: Span<ControlledDeposit>,
+    pub private_inputs: Span<PrivateNoteInput>,
+    pub private_outputs: Span<PrivateNoteOutput>,
+    pub open_outputs: Span<OpenNoteOutput>,
+    pub withdrawals: Span<ControlledWithdrawal>,
+}
+
+/// Context for `privacy_validate_controlled_transition`, executed only inside the proof.
+#[derive(Serde, Copy, Drop, PartialEq, Debug)]
+pub struct ControlledValidationContext {
+    pub protocol_version: felt252,
+    pub chain_id: felt252,
+    pub pool_address: ContractAddress,
+    /// Authenticated pool user whose private transaction is being proven.
+    pub executor: ContractAddress,
+    pub transition: ControlledTransition,
+}
+
+/// Public, proof-bound context for `privacy_apply_controlled_transition`.
+#[derive(Serde, Copy, Drop, PartialEq, Debug)]
+pub struct ControlledApplyContext {
+    pub protocol_version: felt252,
+    pub actions_hash: felt252,
+    pub serialized_actions: Span<felt252>,
+}
+
+/// Stable return shape for the apply-time controlled callback.
+#[derive(Serde, Copy, Drop)]
+pub struct ControlledInvokeResult {
+    pub open_note_deposits: Span<OpenNoteDeposit>,
+    pub associated_addresses: Span<ContractAddress>,
+}

@@ -1,11 +1,39 @@
 use privacy::actions::{ClientAction, ServerAction};
 use privacy::objects::{
+    ControlledApplyContext, ControlledInvokeResult, ControlledNote, ControlledValidationContext,
     EncChannelInfo, EncOutgoingChannelInfo, EncPrivateKey, EncSubchannelInfo, Note,
     OpenNoteScreeningPolicy,
 };
 use privacy::snip12::ScreeningAttestation;
 use starknet::ContractAddress;
 use starknet::account::Call;
+
+/// Application contract interface for policy-controlled private notes.
+///
+/// Validation runs inside the private proven execution and returns opaque authorization data.
+/// Apply runs onchain after proof verification and receives that authorization together with a
+/// commitment to the exact server actions being applied. Implementations should authenticate both
+/// stages with `validate_controlled_validation_context` and `validate_controlled_apply_context`.
+#[starknet::interface]
+pub trait IControlledNoteController<T> {
+    fn privacy_validate_controlled_transition(
+        self: @T, context: ControlledValidationContext, calldata: Span<felt252>,
+    ) -> Span<felt252>;
+
+    fn privacy_validate_controlled_transition_with_computation(
+        self: @T,
+        context: ControlledValidationContext,
+        identity_key: felt252,
+        computation_data: Span<felt252>,
+    ) -> Span<felt252>;
+
+    fn privacy_apply_controlled_transition(
+        ref self: T,
+        context: ControlledApplyContext,
+        authorization_data: Span<felt252>,
+        calldata: Span<felt252>,
+    ) -> ControlledInvokeResult;
+}
 
 #[starknet::interface]
 pub trait IClient<T> {
@@ -263,10 +291,16 @@ pub trait IClient<T> {
     ///   - [`Deposit`](privacy::actions::ClientAction::Deposit): Deposit funds into the contract.
     ///   - [`UseNote`](privacy::actions::ClientAction::UseNote): Uses up a note (creates a
     ///   nullifier for it).
+    ///   - [`CreateControlledNote`](privacy::actions::ClientAction::CreateControlledNote): Creates
+    ///   a confidential bearer note governed by an application controller.
+    ///   - [`UseControlledNote`](privacy::actions::ClientAction::UseControlledNote): Opens and
+    ///   consumes a controlled note.
     ///   - [`Withdraw`](privacy::actions::ClientAction::Withdraw): Withdraw funds from the
     ///   contract.
     ///   - [`InvokeExternal`](privacy::actions::ClientAction::InvokeExternal): Invokes an external
     ///   contract (forwards as a server-side Invoke action).
+    ///   - [`ComputeAndInvoke`](privacy::actions::ClientAction::ComputeAndInvoke): Performs a
+    ///   private application computation before its invoke-phase action.
     ///
     /// #### Returns
     /// - (`Span<`[`ServerAction`](privacy::actions::ServerAction)`>`): The compiled server actions
@@ -309,6 +343,12 @@ pub trait IClient<T> {
     /// - [`EmitNoteUsed`](privacy::actions::ServerAction::EmitNoteUsed): Emits a
     /// [`NoteUsed`](privacy::events::NoteUsed) event.
     ///
+    /// **For [`UseControlledNote`](privacy::actions::ClientAction::UseControlledNote) action:**
+    /// - [`WriteOnce`](privacy::actions::ServerAction::WriteOnce): Writes the nullifier to the
+    /// shared nullifier map.
+    /// - [`EmitControlledNoteUsed`](privacy::actions::ServerAction::EmitControlledNoteUsed): Emits
+    /// a [`ControlledNoteUsed`](privacy::events::ControlledNoteUsed) event.
+    ///
     /// **For [`CreateEncNote`](privacy::actions::ClientAction::CreateEncNote) action:**
     /// - [`WriteOnce`](privacy::actions::ServerAction::WriteOnce): Writes the encrypted note to
     /// storage.
@@ -321,6 +361,13 @@ pub trait IClient<T> {
     /// - [`EmitOpenNoteCreated`](privacy::actions::ServerAction::EmitOpenNoteCreated): Emits an
     /// [`OpenNoteCreated`](privacy::events::OpenNoteCreated) event.
     ///
+    /// **For [`CreateControlledNote`](privacy::actions::ClientAction::CreateControlledNote)
+    /// action:**
+    /// - [`WriteOnce`](privacy::actions::ServerAction::WriteOnce): Writes the controlled note to
+    /// storage.
+    /// - [`EmitControlledNoteCreated`](privacy::actions::ServerAction::EmitControlledNoteCreated):
+    /// Emits a [`ControlledNoteCreated`](privacy::events::ControlledNoteCreated) event.
+    ///
     /// **For [`Withdraw`](privacy::actions::ClientAction::Withdraw) action:**
     /// - [`TransferTo`](privacy::actions::ServerAction::TransferTo): Transfers tokens from the
     /// contract to the withdrawal target via ERC20 `transfer`.
@@ -329,19 +376,22 @@ pub trait IClient<T> {
     ///
     /// **For [`InvokeExternal`](privacy::actions::ClientAction::InvokeExternal) action:**
     /// - [`Invoke`](privacy::actions::ServerAction::Invoke): Invokes the target contract with the
-    /// given calldata.
+    /// given calldata when the transaction has no controlled notes.
+    /// - [`ControlledInvoke`](privacy::actions::ServerAction::ControlledInvoke): Carries the
+    /// controller's proof-time authorization when the transaction creates or spends controlled
+    /// notes. `ComputeAndInvoke` follows the same rule.
     ///
     /// #### Preconditions
     /// - `user_addr` must not be zero.
     /// - `user_private_key` must not be zero and must be canonical.
     /// - `client_actions` must be valid sequential actions to execute on the current state of the
     /// contract.
-    /// - `client_actions` must be valid sequential actions to execute on the current state of the
-    /// contract.
     /// - `client_actions` must be ordered by phase: SetViewingKey, OpenChannel, OpenSubchannel,
-    /// Deposit, UseNote, CreateEncNote/CreateOpenNote, Withdraw, InvokeExternal.
-    /// - At most one [`InvokeExternal`](privacy::actions::ClientAction::InvokeExternal) action is
-    /// allowed per transaction.
+    /// Deposit, UseNote/UseControlledNote, CreateEncNote/CreateOpenNote/CreateControlledNote,
+    /// Withdraw, InvokeExternal/ComputeAndInvoke.
+    /// - At most one invoke-phase action is allowed per transaction.
+    /// - A transaction creating or spending controlled notes must use one common controller and
+    /// its invoke-phase action must target that controller.
     /// - At least one action that provides replay protection must be included
     /// ([`Deposit`](privacy::actions::ClientAction::Deposit),
     /// [`Withdraw`](privacy::actions::ClientAction::Withdraw), and
@@ -441,6 +491,13 @@ pub trait IServer<T> {
     ///   - [`EmitNoteUsed`](privacy::actions::ServerAction::EmitNoteUsed): Emit a
     ///   [`NoteUsed`](privacy::events::NoteUsed) event.
     ///   - [`Invoke`](privacy::actions::ServerAction::Invoke): Invoke an external contract.
+    ///   - [`ControlledInvoke`](privacy::actions::ServerAction::ControlledInvoke): Apply a
+    ///   controller authorization produced during the proven execution.
+    ///   -
+    ///   [`EmitControlledNoteCreated`](privacy::actions::ServerAction::EmitControlledNoteCreated):
+    ///   Emit a [`ControlledNoteCreated`](privacy::events::ControlledNoteCreated) event.
+    ///   - [`EmitControlledNoteUsed`](privacy::actions::ServerAction::EmitControlledNoteUsed): Emit
+    ///   a [`ControlledNoteUsed`](privacy::events::ControlledNoteUsed) event.
     /// - `screening` (`Option<`[`ScreeningAttestation`](privacy::snip12::ScreeningAttestation)`>`):
     /// off-chain authorization for the tx's screening subject. Signed by the configured screener
     /// over that address (taken from the proven actions — not the caller) and an `issued_at`
@@ -460,9 +517,10 @@ pub trait IServer<T> {
     /// must be empty (zero) before writing.
     /// - For [`TransferFrom`](privacy::actions::ServerAction::TransferFrom) actions, the sender
     /// must have sufficient token balance and allowance.
-    /// - For [`Invoke`](privacy::actions::ServerAction::Invoke) actions, the invoked contract must
-    /// have an [`INVOKE_SELECTOR`](privacy::utils::constants::INVOKE_SELECTOR) selector for a
-    /// method that returns a `Span<`[`OpenNoteDeposit`](privacy::objects::OpenNoteDeposit)`>`.
+    /// - A regular [`Invoke`](privacy::actions::ServerAction::Invoke) retains its existing return
+    /// ABI. [`ControlledInvoke`](privacy::actions::ServerAction::ControlledInvoke) calls the
+    /// dedicated controlled apply selector with a proof-bound action context and must return a
+    /// [`ControlledInvokeResult`](privacy::objects::ControlledInvokeResult).
     /// - Every address the tx's actions require screening for must be covered by a fresh, valid
     /// `screening` attestation, and the actions must not require more than one distinct address.
     /// A regular-pool deposit ([`TransferFrom`](privacy::actions::ServerAction::TransferFrom))
@@ -491,11 +549,16 @@ pub trait IServer<T> {
     /// - [`NoteUsed`](privacy::events::NoteUsed): Emitted when
     /// [`EmitNoteUsed`](privacy::actions::ServerAction::EmitNoteUsed) action is executed.
     /// - [`OpenNoteDeposited`](privacy::events::OpenNoteDeposited): Emitted for each
-    /// `OpenNoteDeposit` returned by an [`Invoke`](privacy::actions::ServerAction::Invoke) or
-    /// [`InvokeWithComputation`](privacy::actions::ServerAction::InvokeWithComputation) action.
+    /// `OpenNoteDeposit` returned by an [`Invoke`](privacy::actions::ServerAction::Invoke),
+    /// [`InvokeWithComputation`](privacy::actions::ServerAction::InvokeWithComputation), or
+    /// [`ControlledInvoke`](privacy::actions::ServerAction::ControlledInvoke) action.
+    /// - [`ControlledNoteCreated`](privacy::events::ControlledNoteCreated) and
+    /// [`ControlledNoteUsed`](privacy::events::ControlledNoteUsed): Emitted for controlled-note
+    /// lifecycle actions.
     /// - [`ExternalContractInvoked`](privacy::events::ExternalContractInvoked): Emitted for each
     /// [`Invoke`](privacy::actions::ServerAction::Invoke) or
-    /// [`InvokeWithComputation`](privacy::actions::ServerAction::InvokeWithComputation) action.
+    /// [`InvokeWithComputation`](privacy::actions::ServerAction::InvokeWithComputation), or
+    /// [`ControlledInvoke`](privacy::actions::ServerAction::ControlledInvoke) action.
     ///
     /// #### Reverts
     /// **Context validation (before applying actions):**
@@ -683,6 +746,9 @@ pub trait IViews<T> {
     /// #### Returns
     /// ([`Note`](privacy::objects::Note)): The note, or a zero struct if the note does not exist.
     fn get_note(self: @T, note_id: felt252) -> Note;
+
+    /// Returns the commitment and controller for a controlled note.
+    fn get_controlled_note(self: @T, note_id: felt252) -> ControlledNote;
 
     /// Checks if a nullifier exists.
     ///

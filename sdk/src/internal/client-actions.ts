@@ -63,13 +63,29 @@ export type WithdrawInput = {
 
 export type InvokeExternalInput = {
   contract_address: StarknetAddressBigint;
-  calldata: unknown;
+  calldata: bigint[];
 };
 
 export type ComputeAndInvokeInput = {
   contract_address: StarknetAddressBigint;
-  compute_additional_data: unknown;
-  invoke_additional_data: unknown;
+  compute_additional_data: bigint[];
+  invoke_additional_data: bigint[];
+};
+
+export type CreateControlledNoteInput = {
+  controller: StarknetAddressBigint;
+  policy_commitment: bigint;
+  token: StarknetAddressBigint;
+  amount: bigint;
+  spend_key: bigint;
+};
+
+export type UseControlledNoteInput = {
+  note_id: bigint;
+  policy_commitment: bigint;
+  token: StarknetAddressBigint;
+  amount: bigint;
+  spend_key: bigint;
 };
 
 /**
@@ -85,7 +101,9 @@ export type ClientAction =
   | { type: "UseNote"; input: UseNoteInput }
   | { type: "Withdraw"; input: WithdrawInput }
   | { type: "InvokeExternal"; input: InvokeExternalInput }
-  | { type: "ComputeAndInvoke"; input: ComputeAndInvokeInput };
+  | { type: "ComputeAndInvoke"; input: ComputeAndInvokeInput }
+  | { type: "CreateControlledNote"; input: CreateControlledNoteInput }
+  | { type: "UseControlledNote"; input: UseControlledNoteInput };
 
 /** All valid client action type names */
 export const CLIENT_ACTION_TYPES = [
@@ -99,6 +117,8 @@ export const CLIENT_ACTION_TYPES = [
   "Withdraw",
   "InvokeExternal",
   "ComputeAndInvoke",
+  "CreateControlledNote",
+  "UseControlledNote",
 ] as const;
 
 export type ClientActionType = (typeof CLIENT_ACTION_TYPES)[number];

@@ -39,7 +39,7 @@ import type { BigNumberish } from "starknet";
 import { generateRandom, generateRandom120 } from "../utils/crypto.js";
 import { debugLog } from "../utils/logging.js";
 import { toHex } from "../utils/convert.js";
-import { compute_note_id } from "../utils/hashes.js";
+import { compute_controlled_note_id, compute_note_id } from "../utils/hashes.js";
 import { ReorgError } from "./errors.js";
 
 export type CompileResult = {
@@ -54,10 +54,12 @@ type ClientActions = {
   openTokenChannels: Extract<ClientAction, { type: "OpenSubchannel" }>[];
   deposits: Extract<ClientAction, { type: "Deposit" }>[];
   useNotes: Extract<ClientAction, { type: "UseNote" }>[];
+  useControlledNotes: Extract<ClientAction, { type: "UseControlledNote" }>[];
   createNotes: (
     | Extract<ClientAction, { type: "CreateEncNote" }>
     | Extract<ClientAction, { type: "CreateOpenNote" }>
   )[];
+  createControlledNotes: Extract<ClientAction, { type: "CreateControlledNote" }>[];
   withdraws: Extract<ClientAction, { type: "Withdraw" }>[];
   invoke?: Extract<ClientAction, { type: "InvokeExternal" }>;
   computeAndInvoke?: Extract<ClientAction, { type: "ComputeAndInvoke" }>;
@@ -233,7 +235,9 @@ export class ActionCompiler {
       openTokenChannels: [],
       deposits: [],
       useNotes: [],
+      useControlledNotes: [],
       createNotes: [],
+      createControlledNotes: [],
       withdraws: [],
       invoke: undefined,
       computeAndInvoke: undefined,
@@ -389,6 +393,30 @@ export class ActionCompiler {
       }
     }
 
+    if (actions.useControlledNotes) {
+      for (const action of actions.useControlledNotes) {
+        const noteId = toBigInt(action.noteId);
+        const policyCommitment = toBigInt(action.policyCommitment);
+        const spendKey = toBigInt(action.spendKey);
+        assert(noteId !== 0n, () => "Controlled note ID must be non-zero");
+        assert(policyCommitment !== 0n, () => "Controlled note policy commitment must be non-zero");
+        assert(action.token !== 0n, () => "Controlled note token must be non-zero");
+        assert(action.amount > 0n, () => "Controlled note amount must be positive");
+        assert(spendKey !== 0n, () => "Controlled note spend key must be non-zero");
+        const input = {
+          type: "UseControlledNote",
+          input: {
+            note_id: noteId,
+            policy_commitment: policyCommitment,
+            token: action.token,
+            amount: action.amount,
+            spend_key: spendKey,
+          },
+        } as const;
+        execute(input, clientActions.useControlledNotes);
+      }
+    }
+
     // 6. CreateEncNote/CreateOpenNote
     if (actions.createNotes) {
       for (const action of actions.createNotes) {
@@ -429,6 +457,30 @@ export class ActionCompiler {
       }
     }
 
+    if (actions.createControlledNotes) {
+      for (const action of actions.createControlledNotes) {
+        const controller = toBigInt(action.controller);
+        const policyCommitment = toBigInt(action.policyCommitment);
+        const spendKey = toBigInt(action.spendKey);
+        assert(controller !== 0n, () => "Controller address must be non-zero");
+        assert(policyCommitment !== 0n, () => "Policy commitment must be non-zero");
+        assert(action.token !== 0n, () => "Controlled note token must be non-zero");
+        assert(action.amount > 0n, () => "Controlled note amount must be positive");
+        assert(spendKey !== 0n, () => "Controlled note spend key must be non-zero");
+        const input = {
+          type: "CreateControlledNote",
+          input: {
+            controller,
+            policy_commitment: policyCommitment,
+            token: action.token,
+            amount: action.amount,
+            spend_key: spendKey,
+          },
+        } as const;
+        execute(input, clientActions.createControlledNotes);
+      }
+    }
+
     // 7. Withdraw
     if (actions.withdraws) {
       for (const action of actions.withdraws) {
@@ -447,6 +499,24 @@ export class ActionCompiler {
 
     // surpluses were handled in resolveNotes
 
+    const controlledTargets = new Set([
+      ...(actions.useControlledNotes ?? []).map((note) => toBigInt(note.controller)),
+      ...(actions.createControlledNotes ?? []).map((note) => toBigInt(note.controller)),
+    ]);
+    assert(
+      controlledTargets.size <= 1,
+      () => "A transaction may target only one controlled-note controller"
+    );
+    const hasControlledNoteActions =
+      (actions.useControlledNotes?.length ?? 0) > 0 ||
+      (actions.createControlledNotes?.length ?? 0) > 0;
+    assert(
+      !hasControlledNoteActions ||
+        actions.invoke !== undefined ||
+        actions.computeAndInvoke !== undefined,
+      () => "Controlled-note creation and spend require .invoke() or .computeAndInvoke()"
+    );
+
     // `invoke` and `computeAndInvoke` share the single invoke phase the pool allows per
     // transaction. The builder enforces this, but guard here too for hand-built `Actions`.
     assert(
@@ -458,12 +528,18 @@ export class ActionCompiler {
     // 8. InvokeExternal
     if (actions.invoke) {
       const call = actions.invoke.callBuilder(this.invokeBuilderArgs(clientActions, pool));
+      const target = toBigInt(call.contractAddress);
+      const controlledTarget = controlledTargets.values().next().value;
+      assert(
+        controlledTarget === undefined || target === controlledTarget,
+        () => "The invoke target must match the controlled-note controller"
+      );
       const calldata = CallData.compile(call.calldata ?? []).map(toBigInt);
 
       const input = {
         type: "InvokeExternal",
         input: {
-          contract_address: toBigInt(call.contractAddress),
+          contract_address: target,
           calldata,
         },
       } as const; // typescipt magic
@@ -475,6 +551,12 @@ export class ActionCompiler {
       const details = actions.computeAndInvoke.callBuilder(
         this.invokeBuilderArgs(clientActions, pool)
       );
+      const target = toBigInt(details.contractAddress);
+      const controlledTarget = controlledTargets.values().next().value;
+      assert(
+        controlledTarget === undefined || target === controlledTarget,
+        () => "The invoke target must match the controlled-note controller"
+      );
       const compute_additional_data = CallData.compile(details.computeAdditionalData ?? []).map(
         toBigInt
       );
@@ -485,7 +567,7 @@ export class ActionCompiler {
       const input = {
         type: "ComputeAndInvoke",
         input: {
-          contract_address: toBigInt(details.contractAddress),
+          contract_address: target,
           compute_additional_data,
           invoke_additional_data,
         },
@@ -498,8 +580,8 @@ export class ActionCompiler {
       .flat();
   }
 
-  // Shared arguments for `invoke` / `computeAndInvoke` call builders: the open notes created
-  // in this batch (so the callee can deposit into them) and the withdrawals it can consume.
+  // Shared arguments for `invoke` / `computeAndInvoke` call builders: callback-funded notes
+  // created in this batch (so the callee can deposit into them) and consumable withdrawals.
   private invokeBuilderArgs(
     clientActions: ClientActions,
     pool: PoolSimulator
@@ -515,12 +597,24 @@ export class ActionCompiler {
         },
       ];
     });
+    const controlledNotes = clientActions.createControlledNotes.map((note) => ({
+      noteId: compute_controlled_note_id(
+        this.userAddress,
+        note.input.controller,
+        note.input.policy_commitment,
+        note.input.token,
+        note.input.spend_key
+      ),
+      token: note.input.token,
+      controller: note.input.controller,
+      policyCommitment: note.input.policy_commitment,
+    }));
     const withdrawals = clientActions.withdraws.map((withdraw) => ({
       recipient: withdraw.input.to_addr,
       token: withdraw.input.token,
       amount: withdraw.input.amount,
     }));
-    return { openNotes, withdrawals, poolAddress: this.poolAddress };
+    return { openNotes, controlledNotes, withdrawals, poolAddress: this.poolAddress };
   }
 
   /**
@@ -633,6 +727,14 @@ export class ActionCompiler {
       }
     }
 
+    // The token is both local planning metadata and a private opening verified by the pool.
+    if (actions.useControlledNotes) {
+      for (const note of actions.useControlledNotes) {
+        assert(note.amount > 0n, () => `Controlled note ${note.noteId}: amount must be positive`);
+        update(note.token, note.amount);
+      }
+    }
+
     // Outputs: Withdraws
     if (actions.withdraws) {
       for (const w of actions.withdraws) {
@@ -651,6 +753,13 @@ export class ActionCompiler {
         if (!isOpen(c.amount)) {
           update(c.token, -c.amount);
         }
+      }
+    }
+
+    if (actions.createControlledNotes) {
+      for (const note of actions.createControlledNotes) {
+        assert(note.amount > 0n, () => `Controlled note amount must be positive`);
+        update(note.token, -note.amount);
       }
     }
 

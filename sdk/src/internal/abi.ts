@@ -248,6 +248,58 @@ export const PrivacyPoolABI = [
     ]
   },
   {
+    "type": "struct",
+    "name": "privacy::actions::CreateControlledNoteInput",
+    "members": [
+      {
+        "name": "controller",
+        "type": "core::starknet::contract_address::ContractAddress"
+      },
+      {
+        "name": "policy_commitment",
+        "type": "core::felt252"
+      },
+      {
+        "name": "token",
+        "type": "core::starknet::contract_address::ContractAddress"
+      },
+      {
+        "name": "amount",
+        "type": "core::integer::u128"
+      },
+      {
+        "name": "spend_key",
+        "type": "core::felt252"
+      }
+    ]
+  },
+  {
+    "type": "struct",
+    "name": "privacy::actions::UseControlledNoteInput",
+    "members": [
+      {
+        "name": "note_id",
+        "type": "core::felt252"
+      },
+      {
+        "name": "policy_commitment",
+        "type": "core::felt252"
+      },
+      {
+        "name": "token",
+        "type": "core::starknet::contract_address::ContractAddress"
+      },
+      {
+        "name": "amount",
+        "type": "core::integer::u128"
+      },
+      {
+        "name": "spend_key",
+        "type": "core::felt252"
+      }
+    ]
+  },
+  {
     "type": "enum",
     "name": "privacy::actions::ClientAction",
     "variants": [
@@ -290,6 +342,14 @@ export const PrivacyPoolABI = [
       {
         "name": "ComputeAndInvoke",
         "type": "privacy::actions::ComputeAndInvokeInput"
+      },
+      {
+        "name": "CreateControlledNote",
+        "type": "privacy::actions::CreateControlledNoteInput"
+      },
+      {
+        "name": "UseControlledNote",
+        "type": "privacy::actions::UseControlledNoteInput"
       }
     ]
   },
@@ -536,6 +596,68 @@ export const PrivacyPoolABI = [
     ]
   },
   {
+    "type": "struct",
+    "name": "privacy::actions::ControlledInvokeInput",
+    "members": [
+      {
+        "name": "controller",
+        "type": "core::starknet::contract_address::ContractAddress"
+      },
+      {
+        "name": "authorization_data",
+        "type": "core::array::Span::<core::felt252>"
+      },
+      {
+        "name": "calldata",
+        "type": "core::array::Span::<core::felt252>"
+      },
+      {
+        "name": "source_selector",
+        "type": "core::felt252"
+      }
+    ]
+  },
+  {
+    "type": "struct",
+    "name": "privacy::events::ControlledNoteCreated",
+    "members": [
+      {
+        "name": "note_id",
+        "type": "core::felt252"
+      },
+      {
+        "name": "controller",
+        "type": "core::starknet::contract_address::ContractAddress"
+      },
+      {
+        "name": "note_commitment",
+        "type": "core::felt252"
+      }
+    ]
+  },
+  {
+    "type": "struct",
+    "name": "privacy::events::ControlledNoteUsed",
+    "members": [
+      {
+        "name": "nullifier",
+        "type": "core::felt252"
+      },
+      {
+        "name": "controller",
+        "type": "core::starknet::contract_address::ContractAddress"
+      },
+      {
+        "name": "policy_commitment",
+        "type": "core::felt252"
+      },
+      {
+        "name": "token",
+        "type": "core::starknet::contract_address::ContractAddress"
+      }
+    ]
+  },
+  {
     "type": "enum",
     "name": "privacy::actions::ServerAction",
     "variants": [
@@ -586,6 +708,18 @@ export const PrivacyPoolABI = [
       {
         "name": "InvokeWithComputation",
         "type": "privacy::actions::InvokeInput"
+      },
+      {
+        "name": "ControlledInvoke",
+        "type": "privacy::actions::ControlledInvokeInput"
+      },
+      {
+        "name": "EmitControlledNoteCreated",
+        "type": "privacy::events::ControlledNoteCreated"
+      },
+      {
+        "name": "EmitControlledNoteUsed",
+        "type": "privacy::events::ControlledNoteUsed"
       }
     ]
   },
@@ -794,6 +928,20 @@ export const PrivacyPoolABI = [
     ]
   },
   {
+    "type": "struct",
+    "name": "privacy::objects::ControlledNote",
+    "members": [
+      {
+        "name": "note_commitment",
+        "type": "core::felt252"
+      },
+      {
+        "name": "controller",
+        "type": "core::starknet::contract_address::ContractAddress"
+      }
+    ]
+  },
+  {
     "type": "enum",
     "name": "privacy::objects::OpenNoteScreeningPolicy",
     "variants": [
@@ -927,6 +1075,22 @@ export const PrivacyPoolABI = [
         "outputs": [
           {
             "type": "privacy::objects::Note"
+          }
+        ],
+        "state_mutability": "view"
+      },
+      {
+        "type": "function",
+        "name": "get_controlled_note",
+        "inputs": [
+          {
+            "name": "note_id",
+            "type": "core::felt252"
+          }
+        ],
+        "outputs": [
+          {
+            "type": "privacy::objects::ControlledNote"
           }
         ],
         "state_mutability": "view"
@@ -1955,6 +2119,55 @@ export const PrivacyPoolABI = [
   },
   {
     "type": "event",
+    "name": "privacy::events::ControlledNoteCreated",
+    "kind": "struct",
+    "members": [
+      {
+        "name": "note_id",
+        "type": "core::felt252",
+        "kind": "key"
+      },
+      {
+        "name": "controller",
+        "type": "core::starknet::contract_address::ContractAddress",
+        "kind": "key"
+      },
+      {
+        "name": "note_commitment",
+        "type": "core::felt252",
+        "kind": "data"
+      }
+    ]
+  },
+  {
+    "type": "event",
+    "name": "privacy::events::ControlledNoteUsed",
+    "kind": "struct",
+    "members": [
+      {
+        "name": "nullifier",
+        "type": "core::felt252",
+        "kind": "key"
+      },
+      {
+        "name": "controller",
+        "type": "core::starknet::contract_address::ContractAddress",
+        "kind": "key"
+      },
+      {
+        "name": "policy_commitment",
+        "type": "core::felt252",
+        "kind": "key"
+      },
+      {
+        "name": "token",
+        "type": "core::starknet::contract_address::ContractAddress",
+        "kind": "data"
+      }
+    ]
+  },
+  {
+    "type": "event",
     "name": "privacy::events::FeeAmountSet",
     "kind": "struct",
     "members": [
@@ -2089,6 +2302,16 @@ export const PrivacyPoolABI = [
       {
         "name": "NoteUsed",
         "type": "privacy::events::NoteUsed",
+        "kind": "nested"
+      },
+      {
+        "name": "ControlledNoteCreated",
+        "type": "privacy::events::ControlledNoteCreated",
+        "kind": "nested"
+      },
+      {
+        "name": "ControlledNoteUsed",
+        "type": "privacy::events::ControlledNoteUsed",
         "kind": "nested"
       },
       {

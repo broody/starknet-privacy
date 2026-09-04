@@ -35,6 +35,11 @@ export type EncPrivateKey = {
   enc_private_key: BigNumberish;
 };
 
+export type ControlledNote = {
+  note_commitment: BigNumberish;
+  controller: BigNumberish;
+};
+
 // ============ Pool Contract Interface ============
 
 /**
@@ -53,6 +58,7 @@ export interface PoolContractInterface {
   get_subchannel_info(subchannelId: BigNumberish): EncSubchannelInfo | Promise<EncSubchannelInfo>;
   get_outgoing_channel_info(outgoingChannelId: BigNumberish): EncOutgoingChannelInfo | Promise<EncOutgoingChannelInfo>;
   get_note(noteId: BigNumberish): NoteData | Promise<NoteData>;
+  get_controlled_note(noteId: BigNumberish): ControlledNote | Promise<ControlledNote>;
   nullifier_exists(nullifier: BigNumberish): boolean | Promise<boolean>;
   get_public_key(userAddr: BigNumberish): BigNumberish | Promise<BigNumberish>;
   get_enc_private_key(userAddr: BigNumberish): EncPrivateKey | Promise<EncPrivateKey>;

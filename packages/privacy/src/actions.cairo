@@ -144,6 +144,34 @@ pub(crate) impl CreateOpenNoteInputValid of InputValidation<CreateOpenNoteInput>
     }
 }
 
+/// Input for the `CreateControlledNote` action.
+#[derive(Serde, Copy, Drop, PartialEq, Debug)]
+pub struct CreateControlledNoteInput {
+    /// The application contract validating and authorizing note transitions.
+    pub controller: ContractAddress,
+    /// The application-specific policy commitment.
+    pub policy_commitment: felt252,
+    /// The token's address.
+    pub token: ContractAddress,
+    /// The amount the note represents.
+    pub amount: u128,
+    /// Private bearer capability used to derive the note ID, blinding, and nullifier.
+    pub spend_key: felt252,
+}
+
+pub(crate) impl CreateControlledNoteInputValid of InputValidation<CreateControlledNoteInput> {
+    fn assert_valid(self: CreateControlledNoteInput) {
+        let CreateControlledNoteInput {
+            controller, policy_commitment, token, amount, spend_key,
+        } = self;
+        assert(controller.is_non_zero(), errors::ZERO_CONTRACT_ADDRESS);
+        assert(policy_commitment.is_non_zero(), errors::ZERO_POLICY_COMMITMENT);
+        assert(token.is_non_zero(), errors::ZERO_TOKEN);
+        assert(amount.is_non_zero(), errors::ZERO_AMOUNT);
+        assert(spend_key.is_non_zero(), errors::ZERO_CONTROLLED_NOTE_SPEND_KEY);
+    }
+}
+
 /// Input for the `Deposit` action.
 #[derive(Serde, Copy, Drop, PartialEq, Debug)]
 pub struct DepositInput {
@@ -178,6 +206,33 @@ pub(crate) impl UseNoteInputValid of InputValidation<UseNoteInput> {
         assert(token.is_non_zero(), errors::ZERO_TOKEN);
     }
 }
+
+/// Input for the `UseControlledNote` action.
+#[derive(Serde, Copy, Drop, PartialEq, Debug)]
+pub struct UseControlledNoteInput {
+    /// Identifier emitted when the controlled note was created.
+    pub note_id: felt252,
+    /// Application policy opening hidden by the note commitment until spend.
+    pub policy_commitment: felt252,
+    /// Token opening hidden by the note commitment until spend.
+    pub token: ContractAddress,
+    /// Private amount opening.
+    pub amount: u128,
+    /// Private bearer capability retained by the prover or released by the note policy.
+    pub spend_key: felt252,
+}
+
+pub(crate) impl UseControlledNoteInputValid of InputValidation<UseControlledNoteInput> {
+    fn assert_valid(self: UseControlledNoteInput) {
+        let UseControlledNoteInput { note_id, policy_commitment, token, amount, spend_key } = self;
+        assert(note_id.is_non_zero(), errors::ZERO_NOTE_ID);
+        assert(policy_commitment.is_non_zero(), errors::ZERO_POLICY_COMMITMENT);
+        assert(token.is_non_zero(), errors::ZERO_TOKEN);
+        assert(amount.is_non_zero(), errors::ZERO_AMOUNT);
+        assert(spend_key.is_non_zero(), errors::ZERO_CONTROLLED_NOTE_SPEND_KEY);
+    }
+}
+
 
 /// Input for the `Withdraw` action.
 #[derive(Serde, Copy, Drop, PartialEq, Debug)]
@@ -270,6 +325,10 @@ pub enum ClientAction {
     /// Runs `privacy_compute` on the client and forwards its result as a server-side
     /// `InvokeWithComputation` action.
     ComputeAndInvoke: ComputeAndInvokeInput,
+    /// Creates a confidential note governed by an application controller.
+    CreateControlledNote: CreateControlledNoteInput,
+    /// Opens and consumes a controlled note under its controller's policy.
+    UseControlledNote: UseControlledNoteInput,
 }
 
 #[generate_trait]
@@ -292,7 +351,9 @@ pub(crate) impl ClientActionImpl of ClientActionTrait {
             ClientAction::Deposit(_) => Self::DEPOSIT_PHASE,
             ClientAction::CreateEncNote(_) => Self::CREATE_NOTES_PHASE,
             ClientAction::CreateOpenNote(_) => Self::CREATE_NOTES_PHASE,
+            ClientAction::CreateControlledNote(_) => Self::CREATE_NOTES_PHASE,
             ClientAction::UseNote(_) => Self::USE_NOTES_PHASE,
+            ClientAction::UseControlledNote(_) => Self::USE_NOTES_PHASE,
             ClientAction::Withdraw(_) => Self::WITHDRAW_PHASE,
             ClientAction::InvokeExternal(_) => Self::INVOKE_PHASE,
             ClientAction::ComputeAndInvoke(_) => Self::INVOKE_PHASE,
@@ -364,6 +425,20 @@ pub struct InvokeInput {
     pub calldata: Span<felt252>,
 }
 
+/// A controller invocation whose authorization data was produced by
+/// `privacy_validate_controlled_transition` during the proven execution.
+#[derive(Serde, Copy, Drop, PartialEq, Debug)]
+pub struct ControlledInvokeInput {
+    pub controller: ContractAddress,
+    /// Opaque result returned by the controller's proof-time validation entrypoint.
+    pub authorization_data: Span<felt252>,
+    /// Application calldata supplied by the client and committed by the proof.
+    pub calldata: Span<felt252>,
+    /// Original invoke selector, retained so open-output screening preserves the distinction
+    /// between plain and computation-based interactions.
+    pub source_selector: felt252,
+}
+
 /// An action to be executed by the server.
 #[derive(Serde, Copy, Drop, Debug, PartialEq)]
 pub enum ServerAction {
@@ -396,4 +471,11 @@ pub enum ServerAction {
     /// *NOTE:* The target selector should assert the caller is the privacy contract,
     /// otherwise anyone could invoke it directly and bypass the privacy pool.
     InvokeWithComputation: InvokeInput,
+    /// Explicit controller authorization and apply-time invocation. Appended to preserve all
+    /// server-action discriminants deployed before controlled notes.
+    ControlledInvoke: ControlledInvokeInput,
+    /// Emit a controlled-note creation.
+    EmitControlledNoteCreated: events::ControlledNoteCreated,
+    /// Emit a controlled-note spend.
+    EmitControlledNoteUsed: events::ControlledNoteUsed,
 }

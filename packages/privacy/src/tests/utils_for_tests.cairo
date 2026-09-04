@@ -31,8 +31,8 @@ use privacy::interface::{
     IViewsDispatcher, IViewsDispatcherTrait, IViewsSafeDispatcher, IViewsSafeDispatcherTrait,
 };
 use privacy::objects::{
-    EncChannelInfo, EncOutgoingChannelInfo, EncPrivateKey, EncSubchannelInfo, EncUserAddr, Note,
-    OpenNoteDeposit, OpenNoteScreeningPolicy, TokenBalances, TokenBalancesTrait,
+    ControlledNote, EncChannelInfo, EncOutgoingChannelInfo, EncPrivateKey, EncSubchannelInfo,
+    EncUserAddr, Note, OpenNoteDeposit, OpenNoteScreeningPolicy, TokenBalances, TokenBalancesTrait,
 };
 use privacy::privacy::Privacy;
 use privacy::privacy::Privacy::{ClientInternalTrait, deploy_for_test as deploy_privacy_for_test};
@@ -55,6 +55,7 @@ use privacy::tests::mock_invoke_returns::MockComputeMultiFelt::deploy_for_test a
 use privacy::tests::mock_invoke_returns::MockEcho::deploy_for_test as deploy_mock_echo_for_test;
 use privacy::tests::mock_invoke_returns::MockReturnGarbage::deploy_for_test as deploy_mock_return_garbage_for_test;
 use privacy::tests::mock_invoke_returns::MockReturnTrailingGarbage::deploy_for_test as deploy_mock_return_trailing_garbage_for_test;
+use privacy::tests::mock_note_controller::MockNoteController::deploy_for_test as deploy_mock_note_controller_for_test;
 use privacy::tests::mock_reentrancy::MockReentrancy::deploy_for_test as deploy_mock_reentrancy_for_test;
 use privacy::tests::mock_stark_account::MockStarkAccount::deploy_for_test as deploy_mock_stark_account_for_test;
 use privacy::tests::utils_for_tests::constants::DEFAULT_PROOF_VALIDITY_BLOCKS;
@@ -1787,10 +1788,10 @@ pub(crate) impl PrivacyCfgImpl of PrivacyCfgTrait {
     }
 
     /// The address `actions` require screening for, mirroring the pool's collection: a deposit
-    /// requires its `from_addr`, and open notes created in the tx must be funded by an Invoke in
-    /// that same tx (`UNDEPOSITED_OPEN_NOTES`), so that Invoke's target is the subject unless its
-    /// policy exempts or delegates it. The deposit takes precedence so that a conflicting pair
-    /// still reaches the pool's `MULTIPLE_SCREENING_SUBJECTS`.
+    /// requires its `from_addr`, and callback-funded notes created in the tx must be funded by an
+    /// Invoke in that same tx, so that Invoke's target is the subject unless its policy exempts or
+    /// delegates it. The deposit takes precedence so that a conflicting pair still reaches the
+    /// pool's `MULTIPLE_SCREENING_SUBJECTS`.
     fn _screening_subject_of(
         self: @PrivacyCfg, actions: Span<ServerAction>,
     ) -> Option<ContractAddress> {
@@ -2131,6 +2132,10 @@ pub(crate) impl PrivacyCfgImpl of PrivacyCfgTrait {
         self.views.get_proof_validity_blocks()
     }
 
+    fn get_controlled_note(self: @PrivacyCfg, note_id: felt252) -> ControlledNote {
+        self.views.get_controlled_note(:note_id)
+    }
+
     fn wrap_inputs_into_calls(
         self: @PrivacyCfg,
         user_addr: ContractAddress,
@@ -2273,13 +2278,16 @@ fn deposit_depositor_of(actions: Span<ServerAction>) -> Option<ContractAddress> 
 }
 
 /// Whether `actions` create open notes, which the pool requires to be funded by an Invoke in the
-/// same tx (`UNDEPOSITED_OPEN_NOTES`) — so that Invoke does return deposits.
+/// same transaction.
 fn creates_open_notes(actions: Span<ServerAction>) -> bool {
     let mut creates: bool = false;
     for action in actions {
-        if let ServerAction::EmitOpenNoteCreated(_) = *action {
-            creates = true;
-            break;
+        match *action {
+            ServerAction::EmitOpenNoteCreated(_) => {
+                creates = true;
+                break;
+            },
+            _ => {},
         }
     }
     creates
@@ -2297,6 +2305,10 @@ fn invoke_target_of(actions: Span<ServerAction>) -> Option<ContractAddress> {
             },
             ServerAction::InvokeWithComputation(input) => {
                 target = Some(input.contract_address);
+                break;
+            },
+            ServerAction::ControlledInvoke(input) => {
+                target = Some(input.controller);
                 break;
             },
             _ => {},
@@ -2603,6 +2615,22 @@ pub(crate) fn deploy_mock_compute(
         class_hash: *class_hash, :deployment_params, :panic_on_compute, :panic_on_invoke,
     )
         .expect('MOCK_COMPUTE_DEPLOY_FAIL');
+    contract_address
+}
+
+/// Deploys a controlled-note controller bound to `pool_address`.
+pub(crate) fn deploy_mock_note_controller(
+    pool_address: ContractAddress, allowed: bool, salt: felt252,
+) -> ContractAddress {
+    let class_hash = declare(contract: "MockNoteController")
+        .unwrap_syscall()
+        .contract_class()
+        .class_hash;
+    let deployment_params = DeploymentParams { salt, deploy_from_zero: true };
+    let (contract_address, _) = deploy_mock_note_controller_for_test(
+        class_hash: *class_hash, :deployment_params, :pool_address, :allowed,
+    )
+        .expect('NOTE_CONTROLLER_DEPLOY_FAIL');
     contract_address
 }
 

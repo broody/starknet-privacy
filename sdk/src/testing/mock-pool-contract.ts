@@ -18,6 +18,7 @@ import {
   derivePublicKey,
   ChannelKey,
   generateRandom,
+  shortStringToFelt,
   toBigInt,
 } from "../utils/crypto.js";
 import { encryptions } from "../utils/encryptions.js";
@@ -27,12 +28,13 @@ import type {
   EncSubchannelInfo,
   EncOutgoingChannelInfo,
   EncPrivateKey,
+  ControlledNote,
 } from "../internal/pool-contract-interface.js";
 import { AdvancedMap, AddressMap } from "../utils/maps.js";
 import { assert, isOpen } from "../utils/validation.js";
 import type { MockContracts, MockContract } from "./contracts.js";
 import { SCREENING_SIGNER_PUBLIC_KEY } from "./screening-signer.js";
-import { CairoCustomEnum } from "starknet";
+import { CairoCustomEnum, constants } from "starknet";
 import {
   compute_channel_key,
   compute_channel_marker,
@@ -42,10 +44,17 @@ import {
   compute_nullifier,
   compute_outgoing_channel_id,
   compute_identity_key,
+  compute_controlled_note_id,
+  compute_controlled_note_commitment,
+  compute_controlled_note_nullifier,
 } from "../utils/hashes.js";
 
 import { toHex } from "../utils/convert.js";
-import { ClientAction } from "../internal/client-actions.js";
+import type {
+  ClientAction,
+  CreateControlledNoteInput,
+  UseControlledNoteInput,
+} from "../internal/client-actions.js";
 
 type OpenNote = {
   r: bigint;
@@ -62,7 +71,15 @@ type MockServerAction = {
   deferred?: boolean;
 };
 
+type MockControlledBatch = {
+  target?: StarknetAddressBigint;
+  context: Record<string, unknown>;
+};
+
 type EncryptedNote = { packed: bigint; token: StarknetAddressBigint; index: number };
+
+const CONTROLLED_NOTE_PROTOCOL_VERSION = shortStringToFelt("CONTROLLED_NOTE_PROTOCOL_V1");
+const MOCK_CHAIN_ID = toBigInt(constants.StarknetChainId.SN_SEPOLIA);
 
 export type MockPoolContractSnapshot = {
   publicKeys: Map<StarknetAddressBigint, PublicKey>;
@@ -71,6 +88,7 @@ export type MockPoolContractSnapshot = {
   subchannels: Map<Hash, EncSubchannelInfo>;
   subchannelMarkers: Set<Hash>;
   notes: Map<Hash, EncryptedNote | OpenNote>;
+  controlledNotes: Map<Hash, ControlledNote>;
   nullifiers: Set<Hash>;
   outgoingChannels: Map<bigint, EncOutgoingChannelInfo>;
 };
@@ -95,6 +113,7 @@ export class MockPoolContract implements MockContract, PoolContractInterface {
   private subchannels = new Map<Hash, EncSubchannelInfo>();
   private subchannelMarkers = new Set<Hash>();
   private notes = new Map<Hash, EncryptedNote | OpenNote>();
+  private controlledNotes = new Map<Hash, ControlledNote>();
   private nullifiers = new Set<Hash>();
   private outgoingChannels = new Map<bigint, EncOutgoingChannelInfo>();
   private outgoingChannelCounters = new AddressMap<number>(() => 0);
@@ -120,6 +139,15 @@ export class MockPoolContract implements MockContract, PoolContractInterface {
 
   get_public_key(userAddr: StarknetAddressBigint): bigint {
     return this.publicKeys.has(userAddr) ? toBigInt(this.publicKeys.get(userAddr)!) : 0n;
+  }
+
+  get_controlled_note(noteId: bigint): ControlledNote {
+    return (
+      this.controlledNotes.get(noteId) ?? {
+        note_commitment: 0n,
+        controller: 0n,
+      }
+    );
   }
 
   get_num_of_channels(recipientAddr: StarknetAddressBigint): bigint {
@@ -305,10 +333,11 @@ export class MockPoolContract implements MockContract, PoolContractInterface {
 
     const snapshot = this.snapshot();
     const serverActions: MockServerAction[] = [];
+    const controlledBatch = this.controlledBatch(sender, privateKey, clientActions);
 
     try {
       for (const action of clientActions) {
-        const actions = this.execute_action(sender, privateKey, action);
+        const actions = this.execute_action(sender, privateKey, action, controlledBatch);
         // Apply pool-state actions immediately (required for assertions in subsequent actions)
         // Defer ERC20-modifying actions - only applied during replay
         for (const serverAction of actions) {
@@ -318,6 +347,11 @@ export class MockPoolContract implements MockContract, PoolContractInterface {
           serverActions.push(serverAction);
         }
       }
+      assert(
+        controlledBatch.target === undefined ||
+          serverActions.some((action) => action.type === "ControlledInvoke"),
+        () => "Controlled-note authorization required"
+      );
     } finally {
       // Restore pool state - this is a view function
       this.restore(snapshot);
@@ -473,6 +507,7 @@ export class MockPoolContract implements MockContract, PoolContractInterface {
       subchannels: new Map(this.subchannels),
       subchannelMarkers: new Set(this.subchannelMarkers),
       notes: notesSnapshot,
+      controlledNotes: new Map(this.controlledNotes),
       nullifiers: new Set(this.nullifiers),
       outgoingChannels: new Map(this.outgoingChannels),
     };
@@ -494,6 +529,7 @@ export class MockPoolContract implements MockContract, PoolContractInterface {
     this.subchannels = new Map(s.subchannels);
     this.subchannelMarkers = new Set(s.subchannelMarkers);
     this.notes = new Map(s.notes);
+    this.controlledNotes = new Map(s.controlledNotes);
     this.nullifiers = new Set(s.nullifiers);
     this.outgoingChannels = new Map(s.outgoingChannels);
   }
@@ -509,7 +545,8 @@ export class MockPoolContract implements MockContract, PoolContractInterface {
   private execute_action(
     sender: StarknetAddressBigint,
     privateKey: bigint,
-    action: ClientAction
+    action: ClientAction,
+    controlledBatch: MockControlledBatch
   ): MockServerAction[] {
     switch (action.type) {
       case "SetViewingKey":
@@ -587,11 +624,23 @@ export class MockPoolContract implements MockContract, PoolContractInterface {
           ),
         ];
 
+      case "CreateControlledNote":
+        return this.createControlledNote(sender, action.input);
+
+      case "UseControlledNote":
+        return this.useControlledNote(action.input);
+
       case "Withdraw":
         return [this.withdraw(action.input.token, action.input.to_addr, action.input.amount)];
 
       case "InvokeExternal":
-        return [this.invoke(action.input.contract_address, action.input.calldata as bigint[])];
+        return [
+          this.invoke(
+            action.input.contract_address,
+            action.input.calldata as bigint[],
+            controlledBatch
+          ),
+        ];
 
       case "ComputeAndInvoke":
         return [
@@ -600,7 +649,8 @@ export class MockPoolContract implements MockContract, PoolContractInterface {
             privateKey,
             action.input.contract_address,
             action.input.compute_additional_data as bigint[],
-            action.input.invoke_additional_data as bigint[]
+            action.input.invoke_additional_data as bigint[],
+            controlledBatch
           ),
         ];
 
@@ -854,6 +904,214 @@ export class MockPoolContract implements MockContract, PoolContractInterface {
     };
   }
 
+  /** Build the same pool-derived private transition shape passed to Cairo controllers. */
+  private controlledBatch(
+    sender: StarknetAddressBigint,
+    privateKey: bigint,
+    actions: ClientAction[]
+  ): MockControlledBatch {
+    let target: StarknetAddressBigint | undefined;
+    const setTarget = (controller: StarknetAddressBigint) => {
+      assert(
+        target === undefined || target === controller,
+        () => "A transaction may target only one controlled-note controller"
+      );
+      target = controller;
+    };
+    for (const action of actions) {
+      if (action.type === "CreateControlledNote") setTarget(action.input.controller);
+      if (action.type === "UseControlledNote") {
+        const note = this.controlledNotes.get(action.input.note_id);
+        assert(note, () => `Controlled note ${action.input.note_id} does not exist`);
+        setTarget(toBigInt(note.controller));
+      }
+    }
+
+    const transition = {
+      controlled_inputs: [] as Record<string, unknown>[],
+      controlled_outputs: [] as Record<string, unknown>[],
+      deposits: [] as Record<string, unknown>[],
+      private_inputs: [] as Record<string, unknown>[],
+      private_outputs: [] as Record<string, unknown>[],
+      open_outputs: [] as Record<string, unknown>[],
+      withdrawals: [] as Record<string, unknown>[],
+    };
+    if (target !== undefined) {
+      for (const action of actions) {
+        switch (action.type) {
+          case "Deposit":
+            transition.deposits.push({
+              depositor: sender,
+              token: action.input.token,
+              amount: action.input.amount,
+            });
+            break;
+          case "UseNote": {
+            const note = this.get_decrypted_note(
+              action.input.channel_key,
+              action.input.index,
+              action.input.token
+            );
+            assert(note, () => "Note not found");
+            transition.private_inputs.push({
+              note_id: compute_note_id(
+                action.input.channel_key,
+                action.input.token,
+                action.input.index
+              ),
+              nullifier: compute_nullifier(
+                action.input.channel_key,
+                action.input.token,
+                action.input.index,
+                privateKey
+              ),
+              token: action.input.token,
+              amount: note.amount,
+            });
+            break;
+          }
+          case "UseControlledNote":
+            transition.controlled_inputs.push({
+              note_id: action.input.note_id,
+              policy_commitment: action.input.policy_commitment,
+              token: action.input.token,
+              amount: action.input.amount,
+              spend_key: action.input.spend_key,
+            });
+            break;
+          case "CreateEncNote": {
+            const channelKey = compute_channel_key(
+              sender,
+              privateKey,
+              action.input.recipient_addr,
+              action.input.recipient_public_key
+            );
+            transition.private_outputs.push({
+              note_id: compute_note_id(channelKey, action.input.token, action.input.index),
+              recipient: action.input.recipient_addr,
+              token: action.input.token,
+              amount: action.input.amount,
+            });
+            break;
+          }
+          case "CreateOpenNote": {
+            const channelKey = compute_channel_key(
+              sender,
+              privateKey,
+              action.input.recipient_addr,
+              action.input.recipient_public_key
+            );
+            transition.open_outputs.push({
+              note_id: compute_note_id(channelKey, action.input.token, action.input.index),
+              recipient: action.input.recipient_addr,
+              token: action.input.token,
+            });
+            break;
+          }
+          case "CreateControlledNote":
+            transition.controlled_outputs.push({
+              note_id: compute_controlled_note_id(
+                sender,
+                action.input.controller,
+                action.input.policy_commitment,
+                action.input.token,
+                action.input.spend_key
+              ),
+              policy_commitment: action.input.policy_commitment,
+              token: action.input.token,
+              amount: action.input.amount,
+              spend_key: action.input.spend_key,
+            });
+            break;
+          case "Withdraw":
+            transition.withdrawals.push({
+              recipient: action.input.to_addr,
+              token: action.input.token,
+              amount: action.input.amount,
+            });
+            break;
+        }
+      }
+    }
+    return {
+      target,
+      context: {
+        protocol_version: CONTROLLED_NOTE_PROTOCOL_VERSION,
+        chain_id: MOCK_CHAIN_ID,
+        pool_address: this.address,
+        executor: sender,
+        transition,
+      },
+    };
+  }
+
+  private createControlledNote(
+    sender: StarknetAddressBigint,
+    input: CreateControlledNoteInput
+  ): MockServerAction[] {
+    const { controller, policy_commitment, token, amount, spend_key } = input;
+    const noteId = compute_controlled_note_id(
+      sender,
+      controller,
+      policy_commitment,
+      token,
+      spend_key
+    );
+    const note: ControlledNote = {
+      note_commitment: compute_controlled_note_commitment(
+        noteId,
+        controller,
+        policy_commitment,
+        token,
+        amount,
+        spend_key
+      ),
+      controller,
+    };
+    return [
+      {
+        type: "WriteOnce",
+        apply: () => {
+          assert(
+            !this.controlledNotes.has(noteId),
+            () => `Controlled note ${noteId} already exists`
+          );
+          this.controlledNotes.set(noteId, note);
+        },
+      },
+      { type: "EmitControlledNoteCreated", apply: () => {} },
+    ];
+  }
+
+  private useControlledNote(input: UseControlledNoteInput): MockServerAction[] {
+    const { note_id, policy_commitment, token, amount, spend_key } = input;
+    const note = this.controlledNotes.get(note_id);
+    assert(note, () => `Controlled note ${note_id} does not exist`);
+    const expectedCommitment = compute_controlled_note_commitment(
+      note_id,
+      toBigInt(note.controller),
+      policy_commitment,
+      token,
+      amount,
+      spend_key
+    );
+    assert(
+      expectedCommitment === toBigInt(note.note_commitment),
+      () => `Invalid opening for controlled note ${note_id}`
+    );
+    const nullifier = compute_controlled_note_nullifier(note_id, spend_key);
+    return [
+      {
+        type: "WriteOnce",
+        apply: () => {
+          assert(!this.nullifiers.has(nullifier), () => `Nullifier ${nullifier} already exists`);
+          this.nullifiers.add(nullifier);
+        },
+      },
+      { type: "EmitControlledNoteUsed", apply: () => {} },
+    ];
+  }
+
   private deposit(
     from: StarknetAddressBigint,
     token: StarknetAddressBigint,
@@ -878,13 +1136,26 @@ export class MockPoolContract implements MockContract, PoolContractInterface {
     };
   }
 
-  private invoke(contractAddress: StarknetAddressBigint, calldata: bigint[]): MockServerAction {
+  private invoke(
+    contractAddress: StarknetAddressBigint,
+    calldata: bigint[],
+    controlledBatch: MockControlledBatch
+  ): MockServerAction {
+    if (controlledBatch.target !== undefined) {
+      assert(
+        contractAddress === controlledBatch.target,
+        () => "The invoke target must match the controlled-note controller"
+      );
+      const authorization = this.contracts.call(
+        contractAddress,
+        "privacy_validate_controlled_transition",
+        [controlledBatch.context, calldata]
+      );
+      return this.controlledInvoke(contractAddress, authorization, calldata);
+    }
     return {
       type: "InvokeExternal",
-      apply: () => {
-        const entrypoint = "privacy_invoke";
-        this.contracts.call(contractAddress, entrypoint, calldata);
-      },
+      apply: () => this.contracts.call(contractAddress, "privacy_invoke", calldata),
       deferred: true,
     };
   }
@@ -897,16 +1168,29 @@ export class MockPoolContract implements MockContract, PoolContractInterface {
     privateKey: bigint,
     contractAddress: StarknetAddressBigint,
     computeAdditionalData: bigint[],
-    invokeAdditionalData: bigint[]
+    invokeAdditionalData: bigint[],
+    controlledBatch: MockControlledBatch
   ): MockServerAction {
+    const identityKey = compute_identity_key(
+      toBigInt(sender),
+      privateKey,
+      toBigInt(contractAddress)
+    );
+    if (controlledBatch.target !== undefined) {
+      assert(
+        contractAddress === controlledBatch.target,
+        () => "The invoke target must match the controlled-note controller"
+      );
+      const authorization = this.contracts.call(
+        contractAddress,
+        "privacy_validate_controlled_transition_with_computation",
+        [controlledBatch.context, identityKey, computeAdditionalData]
+      );
+      return this.controlledInvoke(contractAddress, authorization, invokeAdditionalData);
+    }
     return {
       type: "ComputeAndInvoke",
       apply: () => {
-        const identityKey = compute_identity_key(
-          toBigInt(sender),
-          privateKey,
-          toBigInt(contractAddress)
-        );
         const computed = this.contracts.call(contractAddress, "privacy_compute", [
           identityKey,
           ...computeAdditionalData,
@@ -919,6 +1203,33 @@ export class MockPoolContract implements MockContract, PoolContractInterface {
         this.contracts.call(contractAddress, "privacy_invoke_with_computation", [
           ...computedFelts,
           ...invokeAdditionalData,
+        ]);
+      },
+      deferred: true,
+    };
+  }
+
+  private controlledInvoke(
+    controller: StarknetAddressBigint,
+    authorization: unknown,
+    calldata: bigint[]
+  ): MockServerAction {
+    const authorizationData = (Array.isArray(authorization) ? authorization : [authorization]).map(
+      toBigInt
+    );
+    return {
+      type: "ControlledInvoke",
+      apply: () => {
+        const context = {
+          protocol_version: CONTROLLED_NOTE_PROTOCOL_VERSION,
+          // The closure-backed mock has no Cairo serialization for exact action hashing.
+          actions_hash: 0n,
+          serialized_actions: this.serverActions.map((action) => action.type),
+        };
+        this.contracts.call(controller, "privacy_apply_controlled_transition", [
+          context,
+          authorizationData,
+          calldata,
         ]);
       },
       deferred: true,
@@ -968,6 +1279,17 @@ export class MockPoolContract implements MockContract, PoolContractInterface {
             assert(amount >= 0n, () => `CreateEncNote amount must be non-negative: ${amount}`);
             updateTotal(action.input.token, -amount);
           }
+          break;
+        }
+
+        case "CreateControlledNote":
+          updateTotal(action.input.token, -action.input.amount);
+          break;
+
+        case "UseControlledNote": {
+          const note = this.controlledNotes.get(action.input.note_id);
+          assert(note, () => `Controlled note ${action.input.note_id} does not exist`);
+          updateTotal(action.input.token, action.input.amount);
           break;
         }
 

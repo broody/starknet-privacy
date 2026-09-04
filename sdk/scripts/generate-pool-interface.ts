@@ -36,6 +36,7 @@ const INPUT_TYPE_MAP: Record<string, string> = {
   "core::integer::u64": "BigNumberish",
   "core::integer::u32": "number",
   "core::starknet::contract_address::ContractAddress": "BigNumberish",
+  "core::starknet::class_hash::ClassHash": "BigNumberish",
   "core::bool": "boolean",
 };
 
@@ -46,6 +47,7 @@ const OUTPUT_TYPE_MAP: Record<string, string> = {
   "core::integer::u64": "bigint | number",
   "core::integer::u32": "number",
   "core::starknet::contract_address::ContractAddress": "BigNumberish",
+  "core::starknet::class_hash::ClassHash": "BigNumberish",
   "core::bool": "boolean",
 };
 
@@ -62,6 +64,7 @@ const STRUCTS_TO_GENERATE = [
   "privacy::objects::EncOutgoingChannelInfo",
   "privacy::objects::Note",
   "privacy::objects::EncPrivateKey",
+  "privacy::objects::ControlledNote",
 ];
 
 type AbiStruct = {

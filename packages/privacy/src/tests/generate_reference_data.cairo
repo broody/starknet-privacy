@@ -8,7 +8,8 @@ use core::poseidon::poseidon_hash_span;
 use privacy::actions::{ServerAction, WriteOnceInput};
 use privacy::hashes::domain_separation::*;
 use privacy::hashes::{
-    compute_channel_key, compute_channel_marker, compute_enc_amount_hash,
+    compute_channel_key, compute_channel_marker, compute_controlled_note_commitment,
+    compute_controlled_note_id, compute_controlled_note_nullifier, compute_enc_amount_hash,
     compute_enc_channel_key_hash, compute_enc_private_key_hash, compute_enc_recipient_addr_hash,
     compute_enc_sender_addr_hash, compute_enc_token_hash, compute_note_id, compute_nullifier,
     compute_outgoing_channel_id, compute_subchannel_id, compute_subchannel_marker,
@@ -37,6 +38,9 @@ const AMOUNT: u128 = 1000;
 const AUDITOR_PRIVATE_KEY: felt252 = 0x54321;
 const USER_ADDR: felt252 = 0x999;
 const USER_PRIVATE_KEY: felt252 = 0x888;
+const CONTRACT_ADDRESS: felt252 = 0x3333;
+const POLICY_COMMITMENT: felt252 = 0x5555;
+const CONTROLLED_NOTE_SPEND_KEY: felt252 = 0x6666;
 
 fn to_address(addr: felt252) -> ContractAddress {
     addr.try_into().unwrap()
@@ -62,6 +66,24 @@ fn generate_reference_hashes() {
     );
     let note_id = compute_note_id(CHANNEL_KEY, token, INDEX);
     let nullifier = compute_nullifier(CHANNEL_KEY, token, INDEX, SENDER_PRIVATE_KEY);
+    let controlled_note_id = compute_controlled_note_id(
+        sender_addr: sender,
+        controller: to_address(CONTRACT_ADDRESS),
+        policy_commitment: POLICY_COMMITMENT,
+        token: token,
+        spend_key: CONTROLLED_NOTE_SPEND_KEY,
+    );
+    let controlled_note_commitment = compute_controlled_note_commitment(
+        note_id: controlled_note_id,
+        controller: to_address(CONTRACT_ADDRESS),
+        policy_commitment: POLICY_COMMITMENT,
+        token: token,
+        amount: AMOUNT,
+        spend_key: CONTROLLED_NOTE_SPEND_KEY,
+    );
+    let controlled_note_nullifier = compute_controlled_note_nullifier(
+        note_id: controlled_note_id, spend_key: CONTROLLED_NOTE_SPEND_KEY,
+    );
 
     // Outgoing channel id
     let outgoing_channel_id = compute_outgoing_channel_id(sender, SENDER_PRIVATE_KEY, INDEX);
@@ -131,6 +153,9 @@ fn generate_reference_hashes() {
     println!("inputs.auditorPublicKey: 0x{:x}", auditor_public_key);
     println!("inputs.userAddr: 0x{:x}", USER_ADDR);
     println!("inputs.userPrivateKey: 0x{:x}", USER_PRIVATE_KEY);
+    println!("inputs.contractAddress: 0x{:x}", CONTRACT_ADDRESS);
+    println!("inputs.policyCommitment: 0x{:x}", POLICY_COMMITMENT);
+    println!("inputs.controlledNoteSpendKey: 0x{:x}", CONTROLLED_NOTE_SPEND_KEY);
 
     // Outputs (computed hashes)
     println!("outputs.channelKey: 0x{:x}", channel_key);
@@ -146,6 +171,9 @@ fn generate_reference_hashes() {
     println!("outputs.encSenderAddrHash: 0x{:x}", enc_sender_addr_hash);
     println!("outputs.encRecipientAddrHash: 0x{:x}", enc_recipient_addr_hash);
     println!("outputs.outgoingChannelId: 0x{:x}", outgoing_channel_id);
+    println!("outputs.controlledNoteId: 0x{:x}", controlled_note_id);
+    println!("outputs.controlledNoteCommitment: 0x{:x}", controlled_note_commitment);
+    println!("outputs.controlledNoteNullifier: 0x{:x}", controlled_note_nullifier);
 
     // Encryption outputs
     println!("outputs.encSubchannelSalt: 0x{:x}", enc_subchannel.salt);

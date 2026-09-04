@@ -4,6 +4,7 @@
 
 import {
   type CreateNoteAction,
+  type CreateControlledNoteAction,
   type DepositAction,
   type ExecuteOptions,
   type ExecuteResult,
@@ -18,6 +19,7 @@ import {
   type StarknetAddressBigint,
   type TokenOperationsBuilder,
   type UseNoteAction,
+  type UseControlledNoteAction,
   type WithdrawAction,
   type WithdrawOutput,
   type DepositInput,
@@ -30,6 +32,8 @@ import {
   type InvokeCalldataBuilderArgs,
   type SimulateOptions,
   type ShadowAccountsBuilder,
+  type ControlledNoteCreation,
+  type ControlledNoteSpend,
   type ViewingKey,
   Open,
   PrivateTransfersInterface,
@@ -46,8 +50,10 @@ export class TokenOperationsBuilderImpl implements TokenOperationsBuilder {
   // Actions stored without context - context resolved during execute
   public openTokenChannels: OpenTokenChannelAction[] = [];
   public useNotes: UseNoteAction[] = [];
+  public useControlledNotes: UseControlledNoteAction[] = [];
   public deposits: DepositAction[] = [];
   public createNotes: CreateNoteAction[] = [];
+  public createControlledNotes: CreateControlledNoteAction[] = [];
   public withdraws: WithdrawAction[] = [];
   // Surplus recipient (overrides parent builder's surplus recipient for this token)
   public surplusAction?: SurplusAction;
@@ -71,6 +77,20 @@ export class TokenOperationsBuilderImpl implements TokenOperationsBuilder {
   inputs(...notes: Note[]): this {
     for (const note of notes) {
       this.useNotes.push({ token: this.token, note });
+    }
+    return this;
+  }
+
+  useControlledNote(...notes: ControlledNoteSpend[]): this {
+    for (const note of notes) {
+      this.useControlledNotes.push({
+        token: this.token,
+        noteId: note.noteId,
+        policyCommitment: note.policyCommitment,
+        amount: note.amount,
+        spendKey: note.spendKey,
+        controller: note.controller,
+      });
     }
     return this;
   }
@@ -117,6 +137,19 @@ export class TokenOperationsBuilderImpl implements TokenOperationsBuilder {
           amount: output.amount as Amount,
         });
       }
+    }
+    return this;
+  }
+
+  createControlledNote(...outputs: ControlledNoteCreation[]): this {
+    for (const output of outputs) {
+      this.createControlledNotes.push({
+        token: this.token,
+        controller: output.controller,
+        policyCommitment: output.policyCommitment,
+        amount: output.amount,
+        spendKey: output.spendKey,
+      });
     }
     return this;
   }
@@ -274,7 +307,9 @@ export class PrivateTransfersBuilderImpl implements PrivateTransfersBuilder {
     const openTokenChannels: OpenTokenChannelAction[] = [];
     const deposits: DepositAction[] = [];
     const useNotes: UseNoteAction[] = [];
+    const useControlledNotes: UseControlledNoteAction[] = [];
     const createNotes: CreateNoteAction[] = [];
+    const createControlledNotes: CreateControlledNoteAction[] = [];
     const withdraws: WithdrawAction[] = [];
     const surpluses: SurplusAction[] = [];
 
@@ -286,7 +321,9 @@ export class PrivateTransfersBuilderImpl implements PrivateTransfersBuilder {
       openTokenChannels.push(...tokenBuilder.openTokenChannels);
       deposits.push(...tokenBuilder.deposits);
       useNotes.push(...tokenBuilder.useNotes);
+      useControlledNotes.push(...tokenBuilder.useControlledNotes);
       createNotes.push(...tokenBuilder.createNotes);
+      createControlledNotes.push(...tokenBuilder.createControlledNotes);
       withdraws.push(...tokenBuilder.withdraws);
 
       const surplusToAction = tokenBuilder.surplusAction ?? this.defaultSurplusAction;
@@ -301,7 +338,9 @@ export class PrivateTransfersBuilderImpl implements PrivateTransfersBuilder {
       openTokenChannels,
       deposits,
       useNotes,
+      useControlledNotes,
       createNotes,
+      createControlledNotes,
       withdraws,
       surpluses,
       invoke: this.invokeExternal,

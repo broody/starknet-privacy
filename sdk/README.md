@@ -69,6 +69,65 @@ const transfers = createPrivateTransfers({
 
 This section describes the recommended integration patterns. Each subsection gives one opinionated recipe — stick to it unless you have a specific reason to deviate.
 
+### Controlled notes
+
+Controlled notes are private bearer notes governed by an application contract. Always add exactly
+one `.invoke()` (or `.computeAndInvoke()`) targeting the controller. The pool privately supplies the
+controller with the canonical value transition during proving, then calls its proof-authorized apply
+entrypoint atomically with the pool mutations.
+
+For a sealed-bid auction, `spendKey` can be encrypted or committed under a VDF release policy. The
+controller validates the auction, private bid amount, and allowed settlement disposition without a
+threshold committee or custody service.
+
+```typescript
+await transfers
+  .build()
+  .with(STRK)
+  .inputs(fundingNote)
+  .createControlledNote({
+    controller: auction,
+    policyCommitment: settlementCommitment,
+    amount: bidAmount,
+    spendKey: privateSpendKey,
+  })
+  .done()
+  .invoke(() => ({ contractAddress: auction, calldata: [auctionId] }))
+  .execute();
+
+await transfers
+  .build()
+  .with(STRK)
+  .useControlledNote({
+    noteId: controlledNoteId,
+    controller: auction,
+    policyCommitment: settlementCommitment,
+    amount: bidAmount,
+    spendKey: privateSpendKey,
+  })
+  .withdraw({ amount: bidAmount })
+  .done()
+  .invoke(() => ({ contractAddress: auction, calldata: [auctionId] }))
+  .execute();
+```
+
+The invoke builder exposes newly derived controlled-note IDs, token, controller, and policy
+commitment, but never the private amount or spend key. Persist or encrypt the complete opening in the
+application layer; controlled notes are not discoverable through ordinary viewing-key channels.
+
+The controller implements `IControlledNoteController`: `privacy_validate_controlled_transition`
+(and its computation variant) plus `privacy_apply_controlled_transition`. Use
+`validate_controlled_validation_context` and `validate_controlled_apply_context` with the configured
+pool address so both stages authenticate their caller and context. For callback-funded outputs,
+create an ordinary open note in the same transaction and return its deposit from
+`ControlledInvokeResult`; there is no separate open controlled-note primitive.
+
+Use a shared controller and keep note-specific openings out of public application calldata to
+preserve an anonymity set. Controlled notes remain bound to the controller address across upgrades,
+so preserve its callback and policy semantics for outstanding notes or make it immutable. A public
+VDF release also makes the spend-key-derived commitment blinding public; that fits bid reveal, but
+other applications should keep `spendKey` confidential when amount privacy must survive settlement.
+
 ### State management: go stateless
 
 Do not persist `PrivateRegistry` between sessions. Rely on the default full-refresh discovery on every `execute()` call:
@@ -201,14 +260,14 @@ Rule of thumb: any on-chain state that the pool proof reads — account viewing 
 
 ### `createPrivateTransfers(params)`
 
-| Parameter                 | Type                              | Description                                                                                  |
-| ------------------------- | --------------------------------- | -------------------------------------------------------------------------------------------- |
-| `account`                 | `PrivateTransfersUser`            | `{ address, signer }` used to sign proof invocations. A full `Account` is also assignable.   |
-| `viewingKeyProvider`      | `ViewingKeyProvider`              | Provides the private viewing key used for encryption/decryption                              |
-| `provingProvider`         | `ProofProviderInterface`          | Backend that generates validity proofs                                                       |
-| `discoveryProvider`       | `DiscoveryProviderInterface`      | Backend for discovering notes and channels                                                   |
-| `poolContractAddress`     | `StarknetAddress`                 | Address of the deployed privacy pool contract                                                |
-| `proofInvocationFactory?` | `ProofInvocationFactoryInterface` | Optional override for proof invocation construction                                          |
+| Parameter                 | Type                              | Description                                                                                |
+| ------------------------- | --------------------------------- | ------------------------------------------------------------------------------------------ |
+| `account`                 | `PrivateTransfersUser`            | `{ address, signer }` used to sign proof invocations. A full `Account` is also assignable. |
+| `viewingKeyProvider`      | `ViewingKeyProvider`              | Provides the private viewing key used for encryption/decryption                            |
+| `provingProvider`         | `ProofProviderInterface`          | Backend that generates validity proofs                                                     |
+| `discoveryProvider`       | `DiscoveryProviderInterface`      | Backend for discovering notes and channels                                                 |
+| `poolContractAddress`     | `StarknetAddress`                 | Address of the deployed privacy pool contract                                              |
+| `proofInvocationFactory?` | `ProofInvocationFactoryInterface` | Optional override for proof invocation construction                                        |
 
 ### Discovery providers
 
@@ -504,9 +563,8 @@ For gasless transactions via a paymaster (e.g. Avnu), the wallet adds a dust wit
 const { callAndProof: simulated } = await transfers
   .build(options)
   .with(USDC, (t) =>
-    t
-      .transfer({ recipient: bob, amount: 50n })
-      .withdraw({ recipient: 0x1, amount: 1n }))
+    t.transfer({ recipient: bob, amount: 50n }).withdraw({ recipient: 0x1, amount: 1n })
+  )
   .surplusTo(self)
   .simulate({ provider });
 
