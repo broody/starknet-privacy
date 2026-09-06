@@ -107,6 +107,27 @@ pub struct NoteUsed {
 }
 
 #[derive(Serde, Copy, Debug, Drop, PartialEq, starknet::Event)]
+pub struct ControlledNoteCreated {
+    /// The note ID.
+    #[key]
+    pub note_id: felt252,
+    /// The address of the application contract enforcing the note policy.
+    #[key]
+    pub controller: ContractAddress,
+    /// Hiding commitment to the token, amount, policy, and spend-key-derived blinding.
+    pub note_commitment: felt252,
+}
+
+#[derive(Serde, Copy, Debug, Drop, PartialEq, starknet::Event)]
+pub struct ControlledNoteUsed {
+    /// Spend-key-derived nullifier of the controlled note. This does not reveal its note ID.
+    #[key]
+    pub nullifier: felt252,
+    /// The address of the application contract that authorized the spend.
+    #[key]
+    pub controller: ContractAddress,
+}
+#[derive(Serde, Copy, Debug, Drop, PartialEq, starknet::Event)]
 pub struct FeeAmountSet {
     /// The fee amount in FRI per `apply_actions` call.
     pub fee_amount: u128,

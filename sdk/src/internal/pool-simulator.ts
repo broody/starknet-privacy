@@ -67,12 +67,20 @@ export class PoolSimulator {
         this.handleUseNote(action.input);
         break;
 
+      case "UseControlledNote":
+        // Controlled-note state is intentionally outside the private channel registry.
+        break;
+
       case "CreateEncNote":
         this.handleCreateEncNote(action.input);
         break;
 
       case "CreateOpenNote":
         this.handleCreateOpenNote(action.input);
+        break;
+
+      case "CreateControlledNote":
+        // Controlled-note state is intentionally outside the private channel registry.
         break;
 
       case "Withdraw":

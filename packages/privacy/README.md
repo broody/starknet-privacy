@@ -16,7 +16,7 @@ User transaction entry point. `__execute__` validates context, compiles `ClientA
 
 ### IViews
 
-Read-only queries: channel/subchannel existence, note lookup, nullifier checks, public key retrieval, fee info.
+Read-only queries: channel/subchannel existence, regular and controlled note lookup, nullifier checks, public key retrieval, fee info.
 
 ### IAdmin
 
@@ -32,16 +32,71 @@ Actions must be ordered by phase. Actions within the same phase can appear in an
 | 1 | `OpenChannel` | Open channel to recipient |
 | 2 | `OpenSubchannel` | Open token-specific subchannel |
 | 3 | `Deposit` | Deposit tokens into contract |
-| 4 | `UseNote` | Spend a note (creates nullifier) |
+| 4 | `UseNote` | Spend a recipient note (creates nullifier) |
+| 4 | `UseControlledNote` | Privately open a controlled note (requires controller authorization) |
 | 5 | `CreateEncNote` | Create encrypted note |
 | 5 | `CreateOpenNote` | Create open (unencrypted) note |
+| 5 | `CreateControlledNote` | Create a private-value controlled note (requires controller authorization) |
 | 6 | `Withdraw` | Withdraw tokens |
 | 7 | `InvokeExternal` | Call external contract (at most once per tx) |
+| 7 | `ComputeAndInvoke` | Compute privately, then call an external contract (at most once per tx) |
+
+## Controlled notes
+
+`ControlledNote` is a confidential bearer note whose state transition is authorized by an
+application contract. The pool stores only a hiding commitment and the controller address. The
+private opening contains the note ID, policy commitment, token, amount, and `spend_key`; the key
+derives the note's private nonce, commitment blinding, and nullifier.
+
+Every transaction creating or spending a controlled note must contain exactly one invoke-phase
+action targeting the common controller. The pool turns that action into an explicit
+`ControlledInvoke` in two stages:
+
+1. During proven execution, it calls `privacy_validate_controlled_transition` with a
+   `ControlledValidationContext`, an optional private identity/computation input, and public
+   application calldata. The canonical pool-derived context contains the authenticated executor and
+   every supported value flow: controlled inputs and outputs, ordinary private inputs and outputs,
+   deposits, and withdrawals. The controller returns at most 16 felts of **public** authorization;
+   a rejection prevents proof construction.
+2. During `apply_actions`, it calls `privacy_apply_controlled_transition` with that public receipt
+   and the public application calldata. The callback returns nothing, and its state changes execute
+   atomically with all pool mutations.
+
+For a plain invoke, the identity key is zero and the private auxiliary-data span is empty. A
+`ComputeAndInvoke` supplies its derived identity key and private computation data through the same
+validation entrypoint. Controller contracts should call `validate_controlled_validation_context`
+during validation and `validate_controlled_apply_caller` during apply, passing their configured pool
+address.
+
+Proof-time authorization may be applied against newer application state. Controllers must therefore
+include the relevant state epoch, phase version, nonce, or deadline in their public receipt and check
+it again during apply. A policy epoch should remain stable while concurrent operations are valid,
+rather than changing for every operation and unnecessarily invalidating proofs in flight.
+
+Controlled transactions do not support callback-funded `CreateOpenNote` outputs. Settle value into
+encrypted notes, new controlled notes, or withdrawals; the controller callback is limited to the
+application's public state transition. This keeps controlled notes independent of open-note return
+ABIs and screening policy.
+
+The primitive is application-neutral. Controllers can validate private value and disposition during
+proving, then apply only the public application state change onchain. This supports sealed-bid
+auctions, lending and liquidation flows, vesting and escrow, private game economies, gated rewards,
+conditional payments, and other policies over the same canonical transition.
+
+Only one controller may appear in a transaction. Controlled notes remain bound to that contract
+address across upgrades, so applications must preserve callback and policy semantics for
+outstanding notes or use an immutable controller. Generate spend keys with cryptographic
+randomness, retain or encrypt the complete opening until spend, and never put the amount or spend
+key in public calldata, events, logs, or application storage. The pool intentionally provides no
+generic controlled-note discovery because the opening is a private bearer capability; applications
+own its encrypted transport and capability lifecycle. Publicly releasing a spend key also removes
+the commitment's secret blinding, so applications requiring persistent amount privacy must keep it
+confidential.
 
 ## Cryptographic primitives
 
 - All hashes use Poseidon with domain-separation tags (see [`hashes.cairo`](src/hashes.cairo) for formulas)
-- Key derivations: `channel_key`, `channel_marker`, `subchannel_marker`, `subchannel_id`, `outgoing_channel_id`, `note_id`, `nullifier`
+- Key derivations: `channel_key`, `channel_marker`, `subchannel_marker`, `subchannel_id`, `outgoing_channel_id`, `note_id`, `nullifier`, controlled-note IDs/commitments/nullifiers
 - Encryption: ECDH with ephemeral keys; encrypted fields include channel keys, addresses, note amounts, tokens, and private keys
 
 ## Security
@@ -83,6 +138,8 @@ Actions must be ordered by phase. Actions within the same phase can appear in an
 | `Deposit` | `Deposit` action |
 | `Withdrawal` | `Withdraw` action |
 | `NoteUsed` | `UseNote` action |
+| `ControlledNoteCreated` | `CreateControlledNote` action after controller authorization |
+| `ControlledNoteUsed` | `UseControlledNote` action after controller authorization |
 | `OpenNoteCreated` | `CreateOpenNote` action |
 | `OpenNoteDeposited` | `deposit_to_open_note()` |
 | `AuditorPublicKeySet` | `set_auditor_public_key()` |

@@ -69,6 +69,85 @@ const transfers = createPrivateTransfers({
 
 This section describes the recommended integration patterns. Each subsection gives one opinionated recipe — stick to it unless you have a specific reason to deviate.
 
+### Controlled notes
+
+Controlled notes are private bearer notes governed by an application contract. Always add exactly
+one `.invoke()` (or `.computeAndInvoke()`) targeting the controller. The pool privately supplies the
+controller with the canonical value transition during proving, then calls its proof-authorized apply
+entrypoint atomically with the pool mutations. Controlled callbacks update public application state
+and return no data; callback-funded open notes are deliberately unsupported in controlled
+transactions.
+
+The controller can validate application policy, private value, and allowed disposition without an
+intermediary taking custody of the note. The same primitive supports sealed-bid auctions, lending
+and liquidation flows, vesting and escrow, private game economies, gated rewards, and conditional
+payments.
+
+```typescript
+await transfers
+  .build()
+  .with(STRK)
+  .inputs(fundingNote)
+  .createControlledNote({
+    controller,
+    policyCommitment,
+    amount: privateAmount,
+    spendKey: privateSpendKey,
+  })
+  .done()
+  .invoke(() => ({ contractAddress: controller, calldata: [applicationId] }))
+  .execute();
+
+await transfers
+  .build()
+  .with(STRK)
+  .useControlledNote({
+    noteId: controlledNoteId,
+    controller,
+    policyCommitment,
+    amount: privateAmount,
+    spendKey: privateSpendKey,
+  })
+  .withdraw({ amount: privateAmount })
+  .done()
+  .invoke(() => ({ contractAddress: controller, calldata: [applicationId] }))
+  .execute();
+```
+
+The invoke builder exposes newly derived controlled-note IDs, token, controller, and policy
+commitment, but never the private amount or spend key. Persist or encrypt the complete opening in the
+application layer; controlled notes are not discoverable through ordinary viewing-key channels.
+
+SDK debug logs redact spending/viewing/private key fields, private computation data, and whole
+calldata or proof-invocation payloads while retaining action names and identifiers. `withLogging`
+also supplies custom callbacks with sanitized snapshots; method inputs, results, and thrown errors
+remain unchanged. Error details are omitted from logs because they can contain private requests.
+Keep custom private data under `privateAuxiliaryData` rather than interpolating it into log strings
+or passing it as an unlabeled positional array, which the logger cannot identify as private.
+
+The controller implements `IControlledNoteController`: one
+`privacy_validate_controlled_transition` entrypoint plus `privacy_apply_controlled_transition`.
+Plain invokes validate with a zero identity key and empty private auxiliary data;
+`.computeAndInvoke()` uses the same entrypoint with its derived identity key and private computation
+data. Use `validate_controlled_validation_context` and `validate_controlled_apply_caller` with the
+configured pool address.
+
+Validation returns at most 16 felts, all of which become **public**. Never return a note amount,
+spend key, private beneficiary, or other opening data. Include an application state epoch, phase
+version, nonce, or deadline in that receipt and re-check it during apply so a proof authorized in an
+earlier application state cannot execute after a policy or phase change. Keep the relevant epoch
+stable while concurrent operations remain valid rather than incrementing a global nonce per action.
+
+Settle private value into encrypted notes, new controlled notes, or withdrawals. The controller
+apply callback can atomically update protocol or game state, transfer an asset, or record another
+public outcome without returning pool deposits.
+
+Use a shared controller and keep note-specific openings out of public application calldata to
+preserve an anonymity set. Controlled notes remain bound to the controller address across upgrades,
+so preserve its callback and policy semantics for outstanding notes or make it immutable. A public
+release of `spendKey` also makes the spend-key-derived commitment blinding public; keep it
+confidential whenever amount privacy must survive settlement.
+
 ### State management: go stateless
 
 Do not persist `PrivateRegistry` between sessions. Rely on the default full-refresh discovery on every `execute()` call:
@@ -201,14 +280,14 @@ Rule of thumb: any on-chain state that the pool proof reads — account viewing 
 
 ### `createPrivateTransfers(params)`
 
-| Parameter                 | Type                              | Description                                                                                  |
-| ------------------------- | --------------------------------- | -------------------------------------------------------------------------------------------- |
-| `account`                 | `PrivateTransfersUser`            | `{ address, signer }` used to sign proof invocations. A full `Account` is also assignable.   |
-| `viewingKeyProvider`      | `ViewingKeyProvider`              | Provides the private viewing key used for encryption/decryption                              |
-| `provingProvider`         | `ProofProviderInterface`          | Backend that generates validity proofs                                                       |
-| `discoveryProvider`       | `DiscoveryProviderInterface`      | Backend for discovering notes and channels                                                   |
-| `poolContractAddress`     | `StarknetAddress`                 | Address of the deployed privacy pool contract                                                |
-| `proofInvocationFactory?` | `ProofInvocationFactoryInterface` | Optional override for proof invocation construction                                          |
+| Parameter                 | Type                              | Description                                                                                |
+| ------------------------- | --------------------------------- | ------------------------------------------------------------------------------------------ |
+| `account`                 | `PrivateTransfersUser`            | `{ address, signer }` used to sign proof invocations. A full `Account` is also assignable. |
+| `viewingKeyProvider`      | `ViewingKeyProvider`              | Provides the private viewing key used for encryption/decryption                            |
+| `provingProvider`         | `ProofProviderInterface`          | Backend that generates validity proofs                                                     |
+| `discoveryProvider`       | `DiscoveryProviderInterface`      | Backend for discovering notes and channels                                                 |
+| `poolContractAddress`     | `StarknetAddress`                 | Address of the deployed privacy pool contract                                              |
+| `proofInvocationFactory?` | `ProofInvocationFactoryInterface` | Optional override for proof invocation construction                                        |
 
 ### Discovery providers
 
@@ -504,9 +583,8 @@ For gasless transactions via a paymaster (e.g. Avnu), the wallet adds a dust wit
 const { callAndProof: simulated } = await transfers
   .build(options)
   .with(USDC, (t) =>
-    t
-      .transfer({ recipient: bob, amount: 50n })
-      .withdraw({ recipient: 0x1, amount: 1n }))
+    t.transfer({ recipient: bob, amount: 50n }).withdraw({ recipient: 0x1, amount: 1n })
+  )
   .surplusTo(self)
   .simulate({ provider });
 

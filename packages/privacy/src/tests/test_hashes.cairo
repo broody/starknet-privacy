@@ -1,7 +1,8 @@
 use privacy::hashes::{
-    compute_channel_key, compute_channel_marker, compute_identity_key, compute_note_id,
-    compute_nullifier, compute_outgoing_channel_id, compute_subchannel_id,
-    compute_subchannel_marker, hash,
+    compute_channel_key, compute_channel_marker, compute_controlled_note_commitment,
+    compute_controlled_note_id, compute_controlled_note_nullifier, compute_identity_key,
+    compute_note_id, compute_nullifier, compute_outgoing_channel_id, compute_subchannel_id,
+    compute_subchannel_marker, derive_controlled_note_blinding, derive_controlled_note_nonce, hash,
 };
 use starkware_utils::constants::MAX_U32;
 
@@ -252,4 +253,111 @@ fn test_compute_nullifier_different_inputs() {
     assert_ne!(nullifier, nullifier_diff_token);
     assert_ne!(nullifier, nullifier_diff_index);
     assert_ne!(nullifier, nullifier_diff_owner_private_key);
+}
+
+#[test]
+fn test_compute_controlled_note_id_different_inputs() {
+    let sender_addr = hash(['SENDER_ADDR'].span()).try_into().unwrap();
+    let controller = hash(['CONTROLLER'].span()).try_into().unwrap();
+    let policy_commitment = hash(['POLICY_COMMITMENT'].span());
+    let token = hash(['TOKEN'].span()).try_into().unwrap();
+    let spend_key = hash(['SPEND_KEY'].span());
+    let note_id = compute_controlled_note_id(
+        :sender_addr, :controller, :policy_commitment, :token, :spend_key,
+    );
+    let other_sender_addr = hash(['OTHER_SENDER_ADDR'].span()).try_into().unwrap();
+    let other_spend_key = hash(['OTHER_SPEND_KEY'].span());
+    assert_ne!(
+        note_id,
+        compute_controlled_note_id(
+            sender_addr: other_sender_addr, :controller, :policy_commitment, :token, :spend_key,
+        ),
+    );
+    assert_ne!(
+        note_id,
+        compute_controlled_note_id(
+            :sender_addr, :controller, :policy_commitment, :token, spend_key: other_spend_key,
+        ),
+    );
+    assert_ne!(
+        note_id,
+        compute_controlled_note_id(
+            :sender_addr,
+            controller: hash(['OTHER_CONTROLLER'].span()).try_into().unwrap(),
+            :policy_commitment,
+            :token,
+            :spend_key,
+        ),
+    );
+    assert_ne!(
+        note_id,
+        compute_controlled_note_id(
+            :sender_addr,
+            :controller,
+            policy_commitment: hash(['OTHER_POLICY_COMMITMENT'].span()),
+            :token,
+            :spend_key,
+        ),
+    );
+    assert_ne!(
+        note_id,
+        compute_controlled_note_id(
+            :sender_addr,
+            :controller,
+            :policy_commitment,
+            token: hash(['OTHER_TOKEN'].span()).try_into().unwrap(),
+            :spend_key,
+        ),
+    );
+}
+
+#[test]
+fn test_controlled_note_spend_key_derivations_are_domain_separated() {
+    let spend_key = hash(['SPEND_KEY'].span());
+    assert_ne!(derive_controlled_note_nonce(spend_key), derive_controlled_note_blinding(spend_key));
+}
+
+#[test]
+fn test_compute_controlled_note_commitment_hides_amount_and_spend_key() {
+    let note_id = hash(['NOTE_ID'].span());
+    let controller = hash(['CONTROLLER'].span()).try_into().unwrap();
+    let policy_commitment = hash(['POLICY_COMMITMENT'].span());
+    let token = hash(['TOKEN'].span()).try_into().unwrap();
+    let amount: u128 = 42;
+    let spend_key = hash(['SPEND_KEY'].span());
+    let commitment = compute_controlled_note_commitment(
+        :note_id, :controller, :policy_commitment, :token, :amount, :spend_key,
+    );
+    assert_ne!(
+        commitment,
+        compute_controlled_note_commitment(
+            :note_id, :controller, :policy_commitment, :token, amount: amount + 1, :spend_key,
+        ),
+    );
+    assert_ne!(
+        commitment,
+        compute_controlled_note_commitment(
+            :note_id,
+            :controller,
+            :policy_commitment,
+            :token,
+            :amount,
+            spend_key: hash(['OTHER_SPEND_KEY'].span()),
+        ),
+    );
+}
+
+#[test]
+fn test_compute_controlled_note_nullifier_depends_on_note_and_spend_key() {
+    let note_id = hash(['NOTE_ID'].span());
+    let spend_key = hash(['SPEND_KEY'].span());
+    let nullifier = compute_controlled_note_nullifier(:note_id, :spend_key);
+    assert_ne!(
+        nullifier,
+        compute_controlled_note_nullifier(note_id: hash(['OTHER_NOTE'].span()), :spend_key),
+    );
+    assert_ne!(
+        nullifier,
+        compute_controlled_note_nullifier(:note_id, spend_key: hash(['OTHER_SPEND_KEY'].span())),
+    );
 }

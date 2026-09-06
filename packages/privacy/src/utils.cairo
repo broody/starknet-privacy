@@ -16,18 +16,21 @@ use privacy::hashes::{
     compute_enc_user_addr_hash,
 };
 use privacy::objects::{
-    EncChannelInfo, EncOutgoingChannelInfo, EncPrivateKey, EncSubchannelInfo, EncUserAddr, Note,
-    OpenNoteDeposit,
+    ControlledTransition, ControlledValidationContext, EncChannelInfo, EncOutgoingChannelInfo,
+    EncPrivateKey, EncSubchannelInfo, EncUserAddr, Note, OpenNoteDeposit,
 };
 use privacy::snip12::compute_call_set_hash;
 use privacy::utils::constants::{
-    ENTRYPOINT_FAILED, ERR_WRAPPER, HALF_ORDER, LEGACY_VALIDATED, OK_WRAPPER,
-    OPEN_NOTE_PACKED_VALUE, OPEN_NOTE_SALT, TWO_POW_120,
+    CONTROLLED_NOTE_PROTOCOL_VERSION, ENTRYPOINT_FAILED, ERR_WRAPPER, HALF_ORDER, LEGACY_VALIDATED,
+    OK_WRAPPER, OPEN_NOTE_PACKED_VALUE, OPEN_NOTE_SALT, TWO_POW_120,
 };
 use starknet::account::Call;
 use starknet::storage::{StorageAsPointer, StoragePath};
 use starknet::syscalls::{get_class_hash_at_syscall, send_message_to_l1_syscall};
-use starknet::{ContractAddress, Store, SyscallResultTrait, TxInfo, VALIDATED};
+use starknet::{
+    ContractAddress, Store, SyscallResultTrait, TxInfo, VALIDATED, get_caller_address,
+    get_execution_info,
+};
 
 #[starknet::interface]
 pub(crate) trait IAccount<TState> {
@@ -90,6 +93,16 @@ pub mod constants {
     pub const INVOKE_WITH_COMPUTATION_SELECTOR: felt252 = selector!(
         "privacy_invoke_with_computation",
     );
+    /// Version of the controlled-note controller protocol.
+    pub const CONTROLLED_NOTE_PROTOCOL_VERSION: felt252 = 'CONTROLLED_NOTE_PROTOCOL_V1';
+    /// Proof-time controller validation over the canonical private transition.
+    pub const CONTROLLED_VALIDATE_SELECTOR: felt252 = selector!(
+        "privacy_validate_controlled_transition",
+    );
+    /// Apply-time controller authorization and state transition.
+    pub const CONTROLLED_APPLY_SELECTOR: felt252 = selector!("privacy_apply_controlled_transition");
+    /// Maximum public receipt size returned by a controlled-note validator.
+    pub const MAX_CONTROLLED_AUTHORIZATION_FELTS: usize = 16;
     /// STRK fee token address — same on all Starknet networks (mainnet, sepolia, devnet).
     pub const STRK_TOKEN_ADDRESS: ContractAddress =
         0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d
@@ -102,7 +115,7 @@ pub mod constants {
     /// Maximum clock skew (in seconds) tolerated for a screening attestation dated in the future.
     pub const DEPOSITOR_VALIDATION_MAX_FUTURE: u64 = 60;
     /// Contract version, exposed via `get_version`.
-    pub const CONTRACT_VERSION: felt252 = '2.1';
+    pub const CONTRACT_VERSION: felt252 = '2.2';
 }
 
 /// Returns the generator point.
@@ -565,6 +578,44 @@ pub(crate) fn compute_message_hash(
     actions.serialize(ref payload);
     payload.serialize(ref l1_message_data);
     poseidon_hash_span(l1_message_data.span())
+}
+
+/// Authenticates the private context supplied to a controlled-note validation callback.
+pub fn validate_controlled_validation_context(
+    context: ControlledValidationContext, expected_pool: ContractAddress,
+) -> ControlledTransition {
+    assert(get_caller_address() == expected_pool, errors::INVALID_CONTROLLED_CONTEXT);
+    assert(
+        context.protocol_version == CONTROLLED_NOTE_PROTOCOL_VERSION,
+        errors::INVALID_CONTROLLED_CONTEXT,
+    );
+    assert(context.pool_address == expected_pool, errors::INVALID_CONTROLLED_CONTEXT);
+    assert(
+        context.chain_id == get_execution_info().tx_info.chain_id,
+        errors::INVALID_CONTROLLED_CONTEXT,
+    );
+    context.transition
+}
+
+/// Authenticates the pool calling a controlled-note apply callback. The application remains
+/// responsible for checking current policy state and rejecting stale public authorization.
+pub fn validate_controlled_apply_caller(expected_pool: ContractAddress) {
+    assert(get_caller_address() == expected_pool, errors::INVALID_CONTROLLED_CONTEXT);
+}
+
+/// Decodes the controller's proof-time response into the authorization carried by
+/// `ControlledInvoke`. A fixed ABI prevents return-data framing from becoming application-defined.
+pub(crate) fn deserialize_controlled_authorization(
+    mut return_data: Span<felt252>,
+) -> Span<felt252> {
+    let authorization: Span<felt252> = Serde::deserialize(ref return_data)
+        .expect(errors::INVALID_CONTROLLED_AUTHORIZATION);
+    assert(return_data.is_empty(), errors::INVALID_CONTROLLED_AUTHORIZATION);
+    assert(
+        authorization.len() <= constants::MAX_CONTROLLED_AUTHORIZATION_FELTS,
+        errors::INVALID_CONTROLLED_AUTHORIZATION,
+    );
+    authorization
 }
 
 /// Asserts that the call originates from the OS.
