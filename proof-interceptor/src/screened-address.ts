@@ -107,7 +107,7 @@ function getDelegatedAddress(
     return { kind: "none" };
   }
 
-  // The pool assigns a subject only for an invoke that returns deposits.
+  // The anonymizer calldata tells us whether the callback actually returns any deposits.
   if (!createsOpenNotes(openNoteDepositor.action)) {
     return { kind: "none" };
   }
@@ -130,7 +130,12 @@ function getDelegatedAddress(
 function getOpenNoteDepositor(
   actions: CairoCustomEnum[]
 ): OpenNoteDepositor | null {
-  if (!actions.some((action) => action.activeVariant() === "CreateOpenNote")) {
+  if (
+    !actions.some((action) => {
+      const variant = action.activeVariant();
+      return variant === "CreateOpenNote";
+    })
+  ) {
     return null;
   }
   for (const action of actions) {

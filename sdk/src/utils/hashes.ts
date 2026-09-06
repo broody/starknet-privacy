@@ -22,6 +22,11 @@ const ENC_USER_ADDR_TAG = "ENC_USER_ADDR_TAG:V1";
 const ENC_RECIPIENT_ADDR_TAG = "ENC_RECIPIENT_ADDR_TAG:V1";
 const OUTGOING_CHANNEL_ID_TAG = "OUTGOING_CHANNEL_ID_TAG:V1";
 const IDENTITY_KEY_TAG = "IDENTITY_KEY_TAG:V1";
+const CONTROLLED_NOTE_ID_TAG = "CONTROLLED_NOTE_ID_TAG:V1";
+const CONTROLLED_NOTE_NONCE_TAG = "CONTROLLED_NOTE_NONCE_TAG:V1";
+const CONTROLLED_NOTE_BLINDING_TAG = "CONTROLLED_BLINDING_TAG:V1";
+const CONTROLLED_NOTE_COMMIT_TAG = "CONTROLLED_COMMIT_TAG:V1";
+const CONTROLLED_NOTE_NULLIFIER_TAG = "CONTROLLED_NULLIFIER_TAG:V1";
 
 /** See packages/privacy/src/hashes.cairo for documentation. */
 export function compute_identity_key(user_addr: bigint, user_private_key: bigint, contract_address: bigint): bigint {
@@ -96,4 +101,29 @@ export function compute_enc_amount_hash(channel_key: bigint, token: bigint, inde
 /** See packages/privacy/src/hashes.cairo for documentation. */
 export function compute_nullifier(channel_key: bigint, token: bigint, index: number, owner_private_key: bigint): bigint {
   return hash(NULLIFIER_TAG, channel_key, token, index, 0n, owner_private_key);
+}
+
+/** See packages/privacy/src/hashes.cairo for documentation. */
+export function derive_controlled_note_nonce(spend_key: bigint): bigint {
+  return hash(CONTROLLED_NOTE_NONCE_TAG, spend_key);
+}
+
+/** See packages/privacy/src/hashes.cairo for documentation. */
+export function derive_controlled_note_blinding(spend_key: bigint): bigint {
+  return hash(CONTROLLED_NOTE_BLINDING_TAG, spend_key);
+}
+
+/** See packages/privacy/src/hashes.cairo for documentation. */
+export function compute_controlled_note_id(sender_addr: bigint, controller: bigint, policy_commitment: bigint, token: bigint, spend_key: bigint): bigint {
+  return hash(CONTROLLED_NOTE_ID_TAG, sender_addr, controller, policy_commitment, token, derive_controlled_note_nonce(spend_key));
+}
+
+/** See packages/privacy/src/hashes.cairo for documentation. */
+export function compute_controlled_note_commitment(note_id: bigint, controller: bigint, policy_commitment: bigint, token: bigint, amount: bigint, spend_key: bigint): bigint {
+  return hash(CONTROLLED_NOTE_COMMIT_TAG, note_id, controller, policy_commitment, token, amount, derive_controlled_note_blinding(spend_key));
+}
+
+/** See packages/privacy/src/hashes.cairo for documentation. */
+export function compute_controlled_note_nullifier(note_id: bigint, spend_key: bigint): bigint {
+  return hash(CONTROLLED_NOTE_NULLIFIER_TAG, note_id, derive_controlled_note_blinding(spend_key));
 }

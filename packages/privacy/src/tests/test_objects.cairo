@@ -1,6 +1,6 @@
 use privacy::actions::{ServerAction, WriteOnceInput};
 use privacy::objects::{
-    EncOutgoingChannelInfo, EncPrivateKey, EncSubchannelInfo, Note, TokenBalances,
+    ControlledNote, EncOutgoingChannelInfo, EncPrivateKey, EncSubchannelInfo, Note, TokenBalances,
     TokenBalancesTrait,
 };
 use privacy::tests::test_objects::MockContract::deploy_for_test as deploy_mock_contract_for_test;
@@ -141,6 +141,23 @@ fn test_note_to_write_once_action() {
         action,
         ServerAction::WriteOnce(
             WriteOnceInput { storage_address, value: [enc_value, token.into()].span() },
+        ),
+    );
+}
+
+#[test]
+fn test_controlled_note_to_write_once_action() {
+    let note_commitment = 'NOTE_COMMITMENT';
+    let controller: ContractAddress = 'CONTROLLER'.try_into().unwrap();
+    let note = ControlledNote { note_commitment, controller };
+    let storage_address = map_entry_address(
+        map_selector: selector!("controlled_notes"), keys: ['KEY'].span(),
+    );
+
+    assert_eq!(
+        to_write_once_action(:storage_address, value: note),
+        ServerAction::WriteOnce(
+            WriteOnceInput { storage_address, value: [note_commitment, controller.into()].span() },
         ),
     );
 }

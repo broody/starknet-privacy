@@ -20,6 +20,9 @@ import {
   compute_enc_sender_addr_hash,
   compute_enc_recipient_addr_hash,
   compute_outgoing_channel_id,
+  compute_controlled_note_id,
+  compute_controlled_note_commitment,
+  compute_controlled_note_nullifier,
 } from "../../src/utils/hashes.js";
 import referenceHashes from "../fixtures/cairo-reference-data.json" with { type: "json" };
 
@@ -36,6 +39,9 @@ describe("Hash Compatibility with Cairo", () => {
   const index = inputs.index;
   const salt = BigInt(inputs.salt);
   const sharedX = BigInt(inputs.sharedX);
+  const contractAddress = BigInt(inputs.contractAddress);
+  const policyCommitment = BigInt(inputs.policyCommitment);
+  const controlledNoteSpendKey = BigInt(inputs.controlledNoteSpendKey);
 
   it("compute_channel_key matches Cairo", () => {
     const result = compute_channel_key(sender, senderPrivateKey, recipient, recipientPublicKey);
@@ -100,5 +106,29 @@ describe("Hash Compatibility with Cairo", () => {
   it("compute_outgoing_channel_id matches Cairo", () => {
     const result = compute_outgoing_channel_id(sender, senderPrivateKey, index);
     expect(result.toString(16)).toBe(BigInt(outputs.outgoingChannelId).toString(16));
+  });
+
+  it("controlled note hashes match Cairo", () => {
+    const controlledNoteId = compute_controlled_note_id(
+      sender,
+      contractAddress,
+      policyCommitment,
+      token,
+      controlledNoteSpendKey
+    );
+    expect(controlledNoteId.toString(16)).toBe(BigInt(outputs.controlledNoteId).toString(16));
+
+    const noteCommitment = compute_controlled_note_commitment(
+      controlledNoteId,
+      contractAddress,
+      policyCommitment,
+      token,
+      BigInt(inputs.amount),
+      controlledNoteSpendKey
+    );
+    expect(noteCommitment.toString(16)).toBe(BigInt(outputs.controlledNoteCommitment).toString(16));
+    expect(
+      compute_controlled_note_nullifier(controlledNoteId, controlledNoteSpendKey).toString(16)
+    ).toBe(BigInt(outputs.controlledNoteNullifier).toString(16));
   });
 });

@@ -53,7 +53,7 @@ function getTraceId(): string {
 
 export type LogPhase = "ENTER" | "EXIT" | "ERROR";
 
-/** Callback type for logging method calls */
+/** Callback type for logging method calls. `withLogging` supplies sanitized log snapshots. */
 export type LogCallback = (
   targetName: string,
   methodName: string,
@@ -83,11 +83,20 @@ export function withLogging<T extends object>(target: T, name: string, callback:
         return function (this: unknown, ...args: unknown[]) {
           const traceId = getTraceId();
           const context: TraceContext = { id: traceId, childCounter: 0 };
+          const log = (result: unknown, phase: LogPhase) =>
+            callback(
+              name,
+              prop,
+              sanitizeLogValue(args) as unknown[],
+              phase === "ERROR" ? REDACTED : sanitizeLogValue(result),
+              phase,
+              traceId
+            );
 
           const executeWithLogging = () => {
             try {
               // Log Enter
-              callback(name, prop, args, undefined, "ENTER", traceId);
+              log(undefined, "ENTER");
 
               // Apply on 'this' (which is the proxy if called via proxy) to ensure internal calls
               // also go through the proxy.
@@ -97,20 +106,20 @@ export function withLogging<T extends object>(target: T, name: string, callback:
               if (result instanceof Promise) {
                 return result.then(
                   (resolved) => {
-                    callback(name, prop, args, resolved, "EXIT", traceId);
+                    log(resolved, "EXIT");
                     return resolved;
                   },
                   (error) => {
-                    callback(name, prop, args, error, "ERROR", traceId);
+                    log(error, "ERROR");
                     throw error;
                   }
                 );
               }
 
-              callback(name, prop, args, result, "EXIT", traceId);
+              log(result, "EXIT");
               return result;
             } catch (error) {
-              callback(name, prop, args, error, "ERROR", traceId);
+              log(error, "ERROR");
               throw error;
             }
           };
@@ -187,25 +196,54 @@ const getTimestamp = () => {
   return `${hours}:${minutes}:${seconds}.${ms}`;
 };
 
-const createReplacer = () => {
-  const seen = new WeakSet();
-  return (_: string, v: unknown) => {
-    if (typeof v === "bigint") return toHex(v);
-    if (typeof v === "function") return "[Function]";
-    if (v instanceof Uint8Array) return toHex(v);
-    if (typeof v === "object" && v !== null) {
-      if (seen.has(v)) return "[Circular]";
-      seen.add(v);
-      if (v instanceof Map)
-        return {
-          dataType: "Map",
-          value: Array.from(v.entries()),
-        };
-      if (v instanceof Set) return Array.from(v);
-    }
-    return v;
-  };
-};
+const REDACTED = "[REDACTED]";
+// Match both SDK camelCase and Cairo snake_case fields. Opaque calldata can contain a
+// positional witness or serialized JSON, so redact it before inspecting its contents.
+const PRIVATE_LOG_FIELDS = new Set([
+  "spendkey",
+  "privatekey",
+  "viewingkey",
+  "userprivatekey",
+  "userviewingkey",
+  "signer",
+  "computeadditionaldata",
+  "privateauxiliarydata",
+  "privatedata",
+  "computationdata",
+  "calldata",
+  "executeviewcalldata",
+  "executecalldata",
+  "compiledcalldata",
+  "invocation",
+  "proofinvocation",
+]);
+
+/** Build a log-only copy, without invoking custom toJSON methods or mutating the witness. */
+function sanitizeLogValue(value: unknown, key = "", seen = new WeakSet<object>()): unknown {
+  if (PRIVATE_LOG_FIELDS.has(key.replace(/_/g, "").toLowerCase())) return REDACTED;
+  // Error messages, stacks, and causes may echo entire private requests.
+  if (value instanceof Error) return REDACTED;
+  if (typeof value === "bigint") return toHex(value);
+  if (typeof value === "function") return "[Function]";
+  if (value instanceof Uint8Array) return toHex(value);
+  if (typeof value !== "object" || value === null) return value;
+  if (seen.has(value)) return "[Circular]";
+  seen.add(value);
+  if (Array.isArray(value)) return value.map((item) => sanitizeLogValue(item, "", seen));
+  if (value instanceof Map) {
+    return {
+      dataType: "Map",
+      value: Array.from(value, ([entryKey, item]) => [
+        sanitizeLogValue(entryKey, "", seen),
+        sanitizeLogValue(item, typeof entryKey === "string" ? entryKey : "", seen),
+      ]),
+    };
+  }
+  if (value instanceof Set) return Array.from(value, (item) => sanitizeLogValue(item, "", seen));
+  return Object.fromEntries(
+    Object.entries(value).map(([field, item]) => [field, sanitizeLogValue(item, field, seen)])
+  );
+}
 
 /**
  * Console logging callback for use with withLogging.
@@ -224,7 +262,7 @@ export const consoleLogCallback: LogCallback = (
   if (!isDebugEnabled(`${targetName}.${methodName}`)) return;
 
   const format = (value: unknown): string => {
-    return JSON.stringify(value, createReplacer());
+    return JSON.stringify(sanitizeLogValue(value));
   };
 
   const timestamp = color(`[${getTimestamp()}]`, 90); // Gray color for timestamp
@@ -236,8 +274,7 @@ export const consoleLogCallback: LogCallback = (
   } else if (phase === "EXIT") {
     console.log(`${timestamp} ${prefix} ${color("←", GREEN)} ${format(result)}`);
   } else if (phase === "ERROR") {
-    const err = result instanceof Error ? result : new Error(String(result));
-    console.log(`${timestamp} ${prefix} ${color("✖", RED)} ${err.message}`);
+    console.log(`${timestamp} ${prefix} ${color("✖", RED)} ${REDACTED}`);
   }
 };
 
@@ -261,7 +298,7 @@ export const debugLog = (target: string, sub: string, ...args: unknown[]) => {
       timestamp,
       color(`[${traceId}] [${target}.${sub}]`, CYAN),
       ...evaluatedArgs.map((arg) =>
-        typeof arg === "string" ? arg : JSON.stringify(arg, createReplacer(), 2)
+        typeof arg === "string" ? arg : JSON.stringify(sanitizeLogValue(arg), undefined, 2)
       )
     );
   }
